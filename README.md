@@ -4,8 +4,9 @@ Ready2Go CRM is a production-grade, modular client relationship management syste
 
 ## Tech Stack
 - **Frontend:** React.js (Vite), Tailwind CSS, React Router, Axios
-- **Backend:** Python Flask, Flask JWT Extended, SQLAlchemy (PostgreSQL), Flask-CORS, Flask-Migrate
-- **Deployment:** Frontend → Vercel, Backend → Render, Database → PostgreSQL (Neon/Supabase)
+- **Backend:** Python Flask, Flask JWT Extended, SQLAlchemy, Flask-CORS, Flask-Migrate
+- **Database:** Supabase PostgreSQL
+- **Deployment:** Frontend → Vercel, Backend → Render, Database → Supabase
 
 ---
 
@@ -70,7 +71,9 @@ Ready2Go-CRM/
 
 ---
 
-## Database Schema (PostgreSQL)
+## Database — Supabase PostgreSQL
+
+We use **Supabase PostgreSQL** as the managed cloud database. SQLAlchemy connects to it via the standard `postgresql://` connection string provided in the Supabase dashboard.
 
 To avoid complex polymorphic table joins or table bloat, we utilize a unified `applicants` table with a **PostgreSQL JSONB** metadata column to store visa-specific attributes.
 
@@ -117,6 +120,45 @@ To avoid complex polymorphic table joins or table bloat, we utilize a unified `a
 
 ---
 
+## Supabase Setup
+
+Follow these steps to connect the CRM backend to Supabase PostgreSQL:
+
+### 1. Create a Supabase Project
+1. Go to [supabase.com](https://supabase.com) and sign in.
+2. Click **New Project**.
+3. Choose an organization, enter a project name (e.g., `ready2go-crm`), and set a **strong database password**.
+4. Select a region close to your users (e.g., `ap-south-1` for India).
+5. Click **Create new project** and wait for provisioning to complete.
+
+### 2. Find Your Database Credentials
+1. In your Supabase dashboard, go to **Project Settings** → **Database**.
+2. Scroll to the **Connection string** section.
+3. Select the **URI** tab.
+4. Choose **Transaction Pooler** (port `6543`) — this is recommended for web applications.
+5. Your connection string will look like:
+   ```
+   postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+   ```
+
+### 3. Configure the Backend
+1. Copy `backend/.env.example` to `backend/.env`.
+2. Paste your Supabase connection string as the `DATABASE_URL` value.
+3. Generate and fill in `SECRET_KEY` and `JWT_SECRET_KEY`.
+
+### 4. Run Migrations
+```bash
+cd backend
+flask db init          # Only on first setup
+flask db migrate -m "Initial migration"
+flask db upgrade       # Creates tables in Supabase
+```
+
+### 5. Verify Tables
+Go to **Supabase Dashboard** → **Table Editor** and confirm that the `users` and `activity_logs` tables have been created.
+
+---
+
 ## API Blueprint Definitions
 
 All APIs prefix `/api/v1/` and return responses in standard JSON format:
@@ -136,6 +178,90 @@ All APIs prefix `/api/v1/` and return responses in standard JSON format:
 
 ---
 
+## Deployment
+
+### Backend → Render
+
+1. Create a new **Web Service** on [render.com](https://render.com).
+2. Connect the GitHub repository.
+3. Set the **Root Directory** to `backend`.
+4. Set the **Build Command** to `pip install -r requirements.txt`.
+5. Set the **Start Command** to `gunicorn run:app`.
+6. Add the following **Environment Variables**:
+
+| Variable | Value | Required |
+|:---------|:------|:--------:|
+| `FLASK_ENV` | `production` | ✅ |
+| `SECRET_KEY` | *(generate: `python -c "import secrets; print(secrets.token_hex(32))"`)* | ✅ |
+| `JWT_SECRET_KEY` | *(generate a different key)* | ✅ |
+| `DATABASE_URL` | *(Supabase Transaction Pooler URI)* | ✅ |
+| `UPLOAD_FOLDER` | `uploads/` | ✅ |
+| `FRONTEND_URL` | `https://your-app.vercel.app` | ✅ |
+| `JWT_ACCESS_TOKEN_EXPIRES_MINUTES` | `60` | ❌ |
+
+### Frontend → Vercel
+
+1. Create a new project on [vercel.com](https://vercel.com).
+2. Connect the GitHub repository.
+3. Set the **Root Directory** to `frontend`.
+4. Vercel auto-detects Vite. Deploy.
+
+---
+
+## Supabase Connection Checklist
+
+Use this checklist when setting up the database for the first time:
+
+- [ ] Create a new Supabase project
+- [ ] Save the database password securely
+- [ ] Copy the **Transaction Pooler** connection string (port 6543)
+- [ ] Paste it as `DATABASE_URL` in `backend/.env`
+- [ ] Test the connection: `python -c "from app import create_app; app = create_app(); print('OK')"`
+- [ ] Run migrations: `flask db init && flask db migrate -m "Initial" && flask db upgrade`
+- [ ] Verify tables in Supabase Dashboard → Table Editor
+- [ ] Create the first Admin user via Flask shell or seed script
+
+---
+
+## First-Time Developer Setup Guide
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/adityapragyan-09/Ready2Go-Overseas---CRM.git
+cd Ready2Go-Overseas---CRM
+
+# 2. Set up the backend
+cd backend
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS / Linux
+pip install -r requirements.txt
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env:
+#   - Paste your Supabase DATABASE_URL
+#   - Generate and paste SECRET_KEY
+#   - Generate and paste JWT_SECRET_KEY
+
+# 4. Run database migrations
+flask db init
+flask db migrate -m "Initial migration"
+flask db upgrade
+
+# 5. Start the backend server
+python run.py
+# Server runs at http://localhost:5000
+
+# 6. (In a new terminal) Set up the frontend
+cd ../frontend
+npm install
+npm run dev
+# Frontend runs at http://localhost:5173
+```
+
+---
+
 ## Git Workflow Strategy (GitHub Flow)
 
 For a two-member team, a lean and clean workflow keeps speed high while maintaining control:
@@ -151,8 +277,8 @@ For a two-member team, a lean and clean workflow keeps speed high while maintain
 
 ## Development Roadmap (Recommended Order)
 
-1. **Phase 1: Database Setup & Authentication**
-   - Configure PostgreSQL (Neon/Supabase) and run initial database migrations.
+1. **Phase 1: Database Setup & Authentication** ✅
+   - Configure Supabase PostgreSQL and run initial database migrations.
    - Build JWT credentials routes in Flask and design route guards on the frontend.
 2. **Phase 2: Core Applicant Module**
    - Implement the `applicants` SQLAlchemy models and routes.

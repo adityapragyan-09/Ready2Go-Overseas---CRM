@@ -1,20 +1,23 @@
-# Node / Frontend dependencies
+# ──────────────────────────────────────────────
+# Ready2Go CRM — Git Ignore Rules
+# ──────────────────────────────────────────────
+
+# ── Environment Files ─────────────────────────
+# Ignore ALL .env files (they contain secrets)
+.env
+.env.*
+!.env.example
+
+# ── Node / Frontend ──────────────────────────
 node_modules/
 .pnpm-store/
 jspm_packages/
 web_modules/
-
-# React / Vite Build output
 dist/
 dist-ssr/
 *.local
-.env
-.env.production
-.env.development
-.env.local
-.env.*.local
 
-# Python / Flask dependencies
+# ── Python / Flask ────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,7 +25,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -38,18 +40,20 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Python Virtual Environments
+# ── Python Virtual Environments ──────────────
 .venv/
 venv/
 ENV/
 env/
-pythonfiles/
 
-# Upload folders / local storage files
+# ── Upload Folders ────────────────────────────
 backend/uploads/*
 !backend/uploads/.gitkeep
 
-# System & OS Files
+# ── Flask Instance Folder ─────────────────────
+instance/
+
+# ── System & OS Files ─────────────────────────
 .DS_Store
 .DS_Store?
 ._*
@@ -59,7 +63,7 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# IDE / Editors
+# ── IDE / Editors ─────────────────────────────
 .vscode/
 .idea/
 *.suo
@@ -69,13 +73,12 @@ desktop.ini
 *.swp
 *~
 
-# Database / Local PG data (if any)
-*.log
+# ── Database / Local Data ─────────────────────
 *.sqlite
 *.db
 
-# Other logs and runtime files
-logs
+# ── Logs ──────────────────────────────────────
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
