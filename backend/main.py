@@ -84,36 +84,51 @@ app.include_router(activity_logs_router, prefix=f"{settings.API_PREFIX}/activity
 
 # ── Health / Liveness / Readiness ────────────────
 
+# ── Health / Liveness / Readiness ────────────────
+
 @app.get("/health", tags=["Infrastructure"])
 def health_check():
     """Basic health check — returns app status."""
-    return {"status": "healthy", "app": settings.APP_NAME, "version": settings.APP_VERSION}
+    return {
+        "status": "healthy",
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+    }
 
-
-from sqlalchemy import text
-
-from app.db.session import SessionLocal
 
 @app.get("/ready", tags=["Infrastructure"])
 def readiness_check():
+    """
+    Readiness probe.
+    Confirms that the application can establish a database connection.
+    """
+    from app.db.session import SessionLocal
+
     db = None
+
     try:
         db = SessionLocal()
+
+        # Standard SQLAlchemy database connectivity check
         db.execute(text("SELECT 1"))
+
         return {
             "status": "ready",
             "database": "connected",
         }
+
     except Exception as exc:
         logger.exception("Readiness check failed")
+
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
                 "status": "not ready",
                 "database": "disconnected",
-                "error": str(exc),
+                "error": str(exc),   # Remove this after debugging
             },
         )
+
     finally:
         if db:
             db.close()
