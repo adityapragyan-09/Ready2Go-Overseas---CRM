@@ -113,7 +113,11 @@ def create_employee(db: Session, payload: EmployeeCreate, created_by: int) -> Us
         for u in unseeded_users:
             u.employee_code = f"EMP-{counter:06d}"
             counter += 1
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     code = generate_next_employee_code(db)
     hashed_pwd = hash_password(payload.password)
@@ -133,8 +137,12 @@ def create_employee(db: Session, payload: EmployeeCreate, created_by: int) -> Us
     )
 
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        db.commit()
+        db.refresh(new_user)
+    except Exception:
+        db.rollback()
+        raise
 
     # Notification trigger: Employee created
     try:
@@ -174,8 +182,12 @@ def update_employee(db: Session, employee_id: int, payload: EmployeeUpdate) -> U
     if payload.profile_photo is not None:
         user.profile_photo = payload.profile_photo
 
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise
 
     # Notification trigger: Employee updated
     try:
@@ -210,9 +222,13 @@ def update_own_profile(db: Session, employee_id: int, payload: EmployeeProfileUp
     if payload.profile_photo is not None:
         user.profile_photo = payload.profile_photo
 
-    db.commit()
-    db.refresh(user)
-    return user
+    try:
+        db.commit()
+        db.refresh(user)
+        return user
+    except Exception:
+        db.rollback()
+        raise
 
 
 def update_employee_status(db: Session, employee_id: int, is_active: bool, action_by: int) -> User:
@@ -226,8 +242,12 @@ def update_employee_status(db: Session, employee_id: int, is_active: bool, actio
         )
 
     user.is_active = is_active
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise
 
     # Notification trigger: Employee activated/deactivated
     try:
@@ -255,8 +275,12 @@ def reset_employee_password(db: Session, employee_id: int, new_password: str) ->
     """Hash new password and update user record."""
     user = get_employee_by_id(db, employee_id)
     user.password_hash = hash_password(new_password)
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise
 
     # Notification trigger: Password reset
     try:

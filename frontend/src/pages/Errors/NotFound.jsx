@@ -18,7 +18,7 @@ const NotFound = () => {
         <Logo variant="default" className="h-10 w-auto" />
       </div>
       
-      <div className="max-w-md bg-white p-8 rounded-2xl border border-slate-100 shadow-xl shadow-brand-blue/5 space-y-6">
+      <div className="max-w-md bg-white p-8 rounded-2xl border border-slate-100 shadow-xl shadow-brand-blue/5 space-y-6" role="alert">
         <div className="w-16 h-16 mx-auto rounded-full bg-brand-orange/5 border border-brand-orange/10 flex items-center justify-center text-brand-orange">
           <Compass size={32} className="animate-spin-slow" />
         </div>

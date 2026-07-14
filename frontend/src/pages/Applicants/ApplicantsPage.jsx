@@ -1,22 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { 
-  Plus, 
-  ArrowLeft, 
-  Edit2, 
-  Trash2, 
-  Mail, 
-  Phone, 
-  Globe, 
-  User, 
+import {
+  Plus,
+  ArrowLeft,
+  Edit2,
+  Trash2,
+  Mail,
+  Phone,
+  Globe,
+  User,
   Calendar,
-  Clock,
-  FileText,
-  MessageSquare,
-  FileDown,
-  UploadCloud,
-  Send
+  Clock
 } from 'lucide-react';
 
 import api from '../../config/api';
@@ -32,8 +27,6 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import EmptyState from '../../components/EmptyState';
 import SearchBar from '../../components/SearchBar';
 import FilterPanel from '../../components/FilterPanel';
-import StatusBadge from '../../components/StatusBadge';
-import StatusTimeline from '../../components/StatusTimeline';
 import ApplicantTable from '../../components/ApplicantTable';
 import ApplicantForm from '../../components/ApplicantForm';
 import DocumentUploader from '../../components/DocumentUploader';
@@ -90,18 +83,7 @@ export const ApplicantsPage = () => {
     assignedEmployee: ''
   });
 
-  // Mock states for detail view (interactive documents and messages)
-  const [mockDocs, setMockDocs] = useState([
-    { id: 1, name: 'Passport_Copy.pdf', type: 'application/pdf', size: '2.4 MB', date: '2 days ago', status: 'Approved' },
-    { id: 2, name: 'IELTS_Report_Card.pdf', type: 'application/pdf', size: '1.1 MB', date: '2 days ago', status: 'Under Review' },
-    { id: 3, name: 'Letter_of_Acceptance.pdf', type: 'application/pdf', size: '3.8 MB', date: 'Yesterday', status: 'Approved' }
-  ]);
-  const [mockMessages, setMockMessages] = useState([
-    { id: 1, sender: 'System', text: 'Applicant created and pipeline initiated.', time: '2 days ago', isSystem: true },
-    { id: 2, sender: 'Counselor Team', text: 'Checked passport details, valid for next 2 years.', time: 'Yesterday', isSystem: false },
-    { id: 3, sender: 'Advisor', text: 'Sent email requesting additional financial proof documentation.', time: '5 hours ago', isSystem: false }
-  ]);
-  const [newMessageText, setNewMessageText] = useState('');
+  // Detail view state (documents, timeline, tabs)
   const [activeTab, setActiveTab] = useState('overview');
   const [applicantDocs, setApplicantDocs] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -117,7 +99,7 @@ export const ApplicantsPage = () => {
       const data = await documentService.list(applicantId);
       setApplicantDocs(data);
     } catch (err) {
-      console.error("Failed to load applicant documents", err);
+      // Silent fail - document list refresh is non-critical
     } finally {
       setDocsLoading(false);
     }
@@ -135,7 +117,7 @@ export const ApplicantsPage = () => {
           setEmployees(res.data.data.items || []);
         }
       } catch (err) {
-        console.error('Failed to load employee list', err);
+        // Silent fail - employee lookup is admin-only, non-critical for counselors
       }
     };
     fetchEmployees();
@@ -205,7 +187,7 @@ export const ApplicantsPage = () => {
       const data = await progressService.getTimeline(applicantId);
       setTimeline(data);
     } catch (err) {
-      console.error("Failed to load applicant timeline", err);
+      // Silent fail - timeline is a secondary UI element
     } finally {
       setTimelineLoading(false);
     }
@@ -292,37 +274,7 @@ export const ApplicantsPage = () => {
     }
   };
 
-  // Mock message send handler
-  const handleSendMessage = (e) => {
-    e.preventDefault();
-    if (!newMessageText.trim()) return;
-    const msg = {
-      id: Date.now(),
-      sender: user?.name || 'Counselor',
-      text: newMessageText,
-      time: 'Just now',
-      isSystem: false
-    };
-    setMockMessages(prev => [...prev, msg]);
-    setNewMessageText('');
-    toast.success('Message posted to advisor notes thread.');
-  };
-
-  // Mock document upload handler
-  const handleMockUpload = () => {
-    const fileName = prompt('Enter mock file name to upload:', 'Financial_Statement.pdf');
-    if (!fileName) return;
-    const newDoc = {
-      id: Date.now(),
-      name: fileName,
-      type: 'application/pdf',
-      size: '1.8 MB',
-      date: 'Just now',
-      status: 'Under Review'
-    };
-    setMockDocs(prev => [...prev, newDoc]);
-    toast.success(`File "${fileName}" uploaded successfully.`);
-  };
+  // Note: Chat and document components use live services (`ChatWindow`, `DocumentGrid`).
 
   // Helpers
   const getAdvisorName = (id) => {

@@ -11,7 +11,7 @@ export const LoadingSpinner = ({ size = 'md', className = '', label = '' }) => {
   };
 
   return (
-    <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>
+    <div className={`flex flex-col items-center justify-center gap-3 ${className}`} role="status" aria-live="polite">
       <div className="relative">
         <div className={`rounded-full border-slate-100 ${sizeClasses[size]}`}></div>
         <div className={`absolute inset-0 rounded-full border-brand-orange border-t-transparent animate-spin ${sizeClasses[size]}`}></div>

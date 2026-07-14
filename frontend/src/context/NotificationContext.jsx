@@ -13,6 +13,7 @@ export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchErrorCount, setFetchErrorCount] = useState(0);
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -21,7 +22,7 @@ export const NotificationProvider = ({ children }) => {
         setUnreadCount(res.data.data.unread_count);
       }
     } catch (err) {
-      // Silent fail - non-critical
+      setFetchErrorCount(prev => prev + 1);
     }
   }, []);
 
@@ -33,7 +34,7 @@ export const NotificationProvider = ({ children }) => {
         setNotifications(res.data.data.items || []);
       }
     } catch (err) {
-      // Silent fail
+      setFetchErrorCount(prev => prev + 1);
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +86,7 @@ export const NotificationProvider = ({ children }) => {
 
   return (
     <NotificationContext.Provider value={{
-      unreadCount, notifications, isLoading,
+      unreadCount, notifications, isLoading, fetchErrorCount,
       fetchUnreadCount, fetchNotifications,
       markAsRead, markAllAsRead, deleteNotification,
     }}>

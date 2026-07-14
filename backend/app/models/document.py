@@ -20,7 +20,7 @@ class Document(Base):
         String(20), unique=True, nullable=False, index=True
     )
     applicant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("applicants.id"), nullable=False, index=True
+        Integer, ForeignKey("applicants.id", ondelete="CASCADE"), nullable=False, index=True
     )
     document_type: Mapped[str] = mapped_column(String(50), nullable=False)
     original_file_name: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -31,7 +31,7 @@ class Document(Base):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
 
     uploaded_by: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -45,7 +45,7 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
     deleted_by: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True, index=True
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # ── Relationships ────────────────────────────

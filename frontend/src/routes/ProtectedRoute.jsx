@@ -5,8 +5,8 @@ import { useAuth } from '../hooks/useAuth';
 /**
  * Route guard component that protects sub-routes from unauthenticated users.
  */
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const ProtectedRoute = ({ children, requireAdmin = false }) => {
+  const { isAuthenticated, loading, user } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -27,6 +27,10 @@ const ProtectedRoute = ({ children }) => {
   if (!isAuthenticated) {
     // Save the location they were trying to access to redirect them back after login
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (requireAdmin && user?.role !== 'admin') {
+    return <Navigate to="/403" replace />;
   }
 
   return children;

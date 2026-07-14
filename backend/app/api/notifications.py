@@ -5,7 +5,7 @@ Router: /api/v1/notifications
 Access Level: Authenticated Users (JWT required)
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user

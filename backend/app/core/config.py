@@ -6,7 +6,6 @@ No secrets are hardcoded anywhere in this file.
 
 Usage:
     from app.core.config import settings
-    print(settings.DATABASE_URL)
 """
 
 from pydantic import field_validator
@@ -38,7 +37,7 @@ class Settings(BaseSettings):
     ENABLE_SOFT_DELETE: bool = True
 
     # ── Security ─────────────────────────────────
-    SECRET_KEY: str = "dummy_secret_key_change_me_in_production"
+    SECRET_KEY: str
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -90,3 +89,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Runtime safety checks: validate required secrets on startup.
+if settings.ENVIRONMENT.lower() == "production":
+    if not settings.SECRET_KEY:
+        raise RuntimeError("SECRET_KEY must be set in production environment")
+    if not settings.JWT_SECRET_KEY:
+        raise RuntimeError("JWT_SECRET_KEY must be provided in production environment")
+    if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
+        raise RuntimeError("Supabase credentials must be provided in production environment")
+
+if not settings.SECRET_KEY and not settings.JWT_SECRET_KEY:
+    raise RuntimeError("SECRET_KEY and JWT_SECRET_KEY must be configured in .env")

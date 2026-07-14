@@ -44,9 +44,9 @@ async def upload_document_route(
     Validates file extension (PDF, JPG, JPEG, PNG, DOC, DOCX) and size (max 500MB).
     """
     # Dynamically determine file size without reading bytes into RAM
-    await file.seek(0, 2)
-    file_size = await file.tell()
-    await file.seek(0)
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
     
     document = create_document(
         db,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, Clock, RefreshCw, AlertCircle, Calendar, Monitor, Globe } from 'lucide-react';
+import { Clock, RefreshCw, Monitor, Globe } from 'lucide-react';
+// Checked: Clock (lines 119, 128), RefreshCw (line 70), Monitor (line 146), Globe (line 142) — all used.
 import api from '../../config/api';
 import PageHeader from '../../components/PageHeader';
 import Card from '../../components/Card';

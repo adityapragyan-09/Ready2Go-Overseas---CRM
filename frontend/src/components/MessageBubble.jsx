@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, FileText, Download, User } from 'lucide-react';
+import { Trash2, FileText, Download } from 'lucide-react';
 
 const ROLE_BADGES = {
   admin: { label: 'Admin', bg: 'bg-rose-100 text-rose-800' },

@@ -10,8 +10,11 @@ Features:
     - created_by audit trail from JWT user
 """
 
+import logging
 import math
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_
@@ -50,7 +53,7 @@ def _active_query(db: Session):
             joinedload(Applicant.creator),
             joinedload(Applicant.assigned_employee)
         )
-        .filter(Applicant.is_deleted == False)  # noqa: E712
+        .filter(Applicant.is_deleted == False)
     )
 
 
@@ -81,9 +84,14 @@ def create_applicant(db: Session, data: ApplicantCreate, *, created_by: int) -> 
         created_by=created_by,
     )
 
-    db.add(applicant)
-    db.commit()
-    db.refresh(applicant)
+    try:
+        db.add(applicant)
+        db.commit()
+        db.refresh(applicant)
+    except Exception as e:
+        db.rollback()
+        logger.exception("Failed to create applicant.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create applicant.")
 
     # Seed initial progress history log to establish timeline
     from app.models.progress import ProgressHistory
@@ -95,17 +103,25 @@ def create_applicant(db: Session, data: ApplicantCreate, *, created_by: int) -> 
         updated_by=created_by,
         is_system_generated=True,
     )
-    db.add(initial_history)
-    db.commit()
+    try:
+        db.add(initial_history)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to seed initial progress history for applicant %s.", applicant.id)
 
     # Seed initial chat system message
     from app.services.chat_service import log_system_message
-    log_system_message(
-        db,
-        applicant_id=applicant.id,
-        content=f"Applicant record registered under code {applicant.applicant_code}.",
-        action_by=created_by,
-    )
+    try:
+        log_system_message(
+            db,
+            applicant_id=applicant.id,
+            content=f"Applicant record registered under code {applicant.applicant_code}.",
+            action_by=created_by,
+        )
+    except Exception:
+        # non-fatal: continue
+        logger.exception("Failed to log system message for applicant %s.", applicant.id)
 
     # Notification trigger: Applicant created
     try:
@@ -136,7 +152,8 @@ def create_applicant(db: Session, data: ApplicantCreate, *, created_by: int) -> 
                 reference_id=applicant.id,
             )
     except Exception:
-        pass
+        # non-fatal: do not block applicant creation on notification failure
+        logger.exception("Failed to create notification for applicant %s.", applicant.id)
 
     return applicant
 
@@ -164,8 +181,13 @@ def update_applicant(db: Session, applicant_id: int, data: ApplicantUpdate) -> A
 
     applicant.updated_at = datetime.now(timezone.utc)
 
-    db.commit()
-    db.refresh(applicant)
+    try:
+        db.commit()
+        db.refresh(applicant)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to update applicant %s.", applicant_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update applicant.")
 
     # Notification trigger: Applicant updated
     try:
@@ -182,7 +204,8 @@ def update_applicant(db: Session, applicant_id: int, data: ApplicantUpdate) -> A
             reference_id=applicant.id,
         )
     except Exception:
-        pass
+        # non-fatal
+        logger.exception("Failed to send update notification for applicant %s.", applicant_id)
 
     return applicant
 
@@ -200,8 +223,13 @@ def delete_applicant(db: Session, applicant_id: int, *, deleted_by: int) -> Appl
     applicant.deleted_at = datetime.now(timezone.utc)
     applicant.deleted_by = deleted_by
 
-    db.commit()
-    db.refresh(applicant)
+    try:
+        db.commit()
+        db.refresh(applicant)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to soft-delete applicant %s.", applicant_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete applicant.")
 
     # Notification trigger: Applicant soft-deleted
     try:
@@ -219,7 +247,8 @@ def delete_applicant(db: Session, applicant_id: int, *, deleted_by: int) -> Appl
             reference_id=applicant.id,
         )
     except Exception:
-        pass
+        # non-fatal
+        logger.exception("Failed to send deletion notification for applicant %s.", applicant_id)
 
     return applicant
 

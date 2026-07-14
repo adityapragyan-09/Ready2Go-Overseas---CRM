@@ -1,5 +1,5 @@
 import React from 'react';
-import { Filter, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Filter, RotateCcw } from 'lucide-react';
 import Button from './Button';
 
 const visaTypes = [

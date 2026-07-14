@@ -81,10 +81,10 @@ export const StatusUpdateModal = ({ isOpen, onClose, applicant, mode, onSaveSucc
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 animate-scale-up">
+      <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 animate-scale-up" role="dialog" aria-modal="true" aria-labelledby="status-modal-title">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+          <h3 id="status-modal-title" className="text-base font-bold text-slate-800 flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-brand-orange" />
             {mode === 'status' ? 'Transition Status Stage' : 'Append Progress Remark Note'}
           </h3>

@@ -98,8 +98,10 @@ const DashboardLayout = () => {
       {/* ── Mobile Top Header ───────────────────── */}
       <header className="md:hidden bg-brand-dark px-4 py-3 flex items-center justify-between sticky top-0 z-50 shadow-md">
         <Logo variant="light" className="h-8 w-auto" />
-        <button 
+        <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-expanded={mobileMenuOpen}
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
           className="p-1.5 rounded-lg hover:bg-white/5 text-slate-300 hover:text-white transition-colors"
         >
           {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
@@ -118,7 +120,7 @@ const DashboardLayout = () => {
         </div>
 
         {/* Navigation links */}
-        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none]">
+        <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none]" aria-label="Main navigation">
           {navItems.map((item, idx) => {
             const Icon = item.icon;
             const active = isActive(item.path);
@@ -127,10 +129,11 @@ const DashboardLayout = () => {
                 key={idx}
                 to={item.path}
                 onClick={() => setMobileMenuOpen(false)}
+                aria-current={active ? 'page' : undefined}
                 className={`
                   flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group
-                  ${active 
-                    ? 'bg-brand-orange text-white shadow-md shadow-brand-orange/20' 
+                  ${active
+                    ? 'bg-brand-orange text-white shadow-md shadow-brand-orange/20'
                     : 'text-slate-300 hover:text-white hover:bg-white/5'
                   }
                 `}
@@ -167,8 +170,9 @@ const DashboardLayout = () => {
 
       {/* Mobile Drawer Overlay */}
       {mobileMenuOpen && (
-        <div 
+        <div
           onClick={() => setMobileMenuOpen(false)}
+          aria-label="Close menu"
           className="fixed inset-0 bg-black/40 z-30 md:hidden backdrop-blur-sm"
         ></div>
       )}

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { 
-  Plus, Search, UserCheck, UserX, UserPlus, Key, ShieldAlert, X,
-  Briefcase, Mail, Phone, Clock, FileText, CheckCircle2, Copy,
-  Eye, RefreshCw, Lock, Award, Building, User
+import {
+  Plus, Search, UserCheck, UserX, ShieldAlert, X,
+  Briefcase, Mail, Phone, Clock, CheckCircle2, Copy,
+  Eye, Lock
 } from 'lucide-react';
 
 import api from '../../config/api';
@@ -112,7 +112,7 @@ const EmployeeAssignmentPanel = ({ employeeId }) => {
           setApplicants(res.data.data.items || []);
         }
       } catch (err) {
-        console.error('Failed to load assignments:', err);
+        // Silent fail - assignments panel is secondary content
       } finally {
         setLoading(false);
       }
@@ -585,6 +585,9 @@ export const EmployeeManagement = () => {
   };
 
   const handlePasswordReset = async (emp) => {
+    // Note: window.prompt is used here intentionally for simplicity. In a production
+    // accessibility audit, replace with a modal dialog (aria-dialog) that includes an
+    // aria-labelledby pointing to the employee name and an accessible password input.
     const password = window.prompt(`Enter new access password for "${emp.full_name}":`);
     if (!password) return;
     if (password.length < 6) {
@@ -645,6 +648,9 @@ export const EmployeeManagement = () => {
 
   // ── RENDER: Add/Edit Full-Page Form View ──────────
   if (view === 'add' || view === 'edit') {
+    if (!isAdmin) {
+      return <Navigate to="/403" replace />;
+    }
     return (
       <div className="space-y-6 text-left animate-fade-in">
         <PageHeader

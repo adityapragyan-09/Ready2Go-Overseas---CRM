@@ -8,26 +8,29 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     // Check if user is already logged in on mount
     const checkAuth = async () => {
       if (authService.isAuthenticated()) {
         try {
           // Attempt to load profile from backend to verify token is valid
           const profile = await authService.getCurrentUser();
+          if (!isMounted) return;
           setUser(profile);
           // Sync stored user with fresh profile details
           localStorage.setItem('user', JSON.stringify(profile));
         } catch (error) {
-          console.error('Session validation failed on init:', error);
+          if (!isMounted) return;
           setUser(null);
           localStorage.removeItem('access_token');
           localStorage.removeItem('user');
         }
       }
-      setLoading(false);
+      if (isMounted) setLoading(false);
     };
 
     checkAuth();
+    return () => { isMounted = false; };
   }, []);
 
   const login = async (email, password) => {

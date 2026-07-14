@@ -5,6 +5,11 @@ Handles status transition validations, appending immutable progress logs, and ad
 """
 
 from datetime import datetime, timezone
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
@@ -123,8 +128,13 @@ def update_status(
     )
 
     db.add(history_entry)
-    db.commit()
-    db.refresh(history_entry)
+    try:
+        db.commit()
+        db.refresh(history_entry)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to update status for applicant %s.", applicant_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update status.")
 
     # Log status change system message
     from app.services.chat_service import log_system_message
@@ -156,7 +166,7 @@ def update_status(
             reference_id=applicant_id,
         )
     except Exception:
-        pass
+        logger.exception("Failed to send status update notification for applicant %s.", applicant_id)
 
     return history_entry
 
@@ -189,8 +199,13 @@ def add_note(
     )
 
     db.add(history_entry)
-    db.commit()
-    db.refresh(history_entry)
+    try:
+        db.commit()
+        db.refresh(history_entry)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to add progress note for applicant %s.", applicant_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to add progress note.")
 
     # Load updater backref for response
     db.query(ProgressHistory).options(joinedload(ProgressHistory.updater)).filter(ProgressHistory.id == history_entry.id).first()
@@ -211,7 +226,7 @@ def add_note(
             reference_id=applicant_id,
         )
     except Exception:
-        pass
+        logger.exception("Failed to send notification for progress note on applicant %s.", applicant_id)
 
     return history_entry
 

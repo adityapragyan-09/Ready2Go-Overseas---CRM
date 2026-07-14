@@ -2,8 +2,7 @@
 Ready2Go CRM — Dashboard & Analytics Endpoints Router
 """
 
-from typing import List
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_admin

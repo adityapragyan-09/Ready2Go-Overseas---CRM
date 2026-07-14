@@ -14,13 +14,13 @@ class ProgressHistory(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     applicant_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("applicants.id"), nullable=False, index=True
+        Integer, ForeignKey("applicants.id", ondelete="CASCADE"), nullable=False, index=True
     )
     previous_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     current_status: Mapped[str] = mapped_column(String(30), nullable=False)
     remarks: Mapped[str] = mapped_column(Text, nullable=False)
     updated_by: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

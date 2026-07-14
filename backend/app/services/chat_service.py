@@ -12,6 +12,10 @@ from app.models.applicant import Applicant
 from app.models.message import Message
 from app.models.user import User
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def get_conversation(db: Session, applicant_id: int) -> list[Message]:
     """
@@ -83,8 +87,13 @@ def create_message(
     )
 
     db.add(message)
-    db.commit()
-    db.refresh(message)
+    try:
+        db.commit()
+        db.refresh(message)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to create message for applicant %s.", applicant_id)
+        raise
 
     # Load sender backref for serialization
     db.query(Message).options(joinedload(Message.sender)).filter(Message.id == message.id).first()
@@ -106,7 +115,7 @@ def create_message(
                 reference_id=applicant_id,
             )
         except Exception:
-            pass
+            logger.exception("Failed to send notification for message on applicant %s.", applicant_id)
 
     return message
 
@@ -167,8 +176,13 @@ def soft_delete_message(
 
     message.is_deleted = True
     message.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(message)
+    try:
+        db.commit()
+        db.refresh(message)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to soft-delete message %s.", message_id)
+        raise
 
     return message
 

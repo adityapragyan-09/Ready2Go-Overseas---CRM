@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, CheckCheck, Trash2, X, Users, FileText, MessageSquare, TrendingUp, Shield, Settings, LogIn } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, X, Users, FileText, MessageSquare, TrendingUp, Shield, Settings, LogIn } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 
 // ── Module icon mapping ──

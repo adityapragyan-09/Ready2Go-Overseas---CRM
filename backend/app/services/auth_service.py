@@ -68,14 +68,18 @@ def record_login(
         login_time=now_utc,
     )
     db.add(log)
-    
+
     # Automatically update user.last_login
     user = db.query(User).filter(User.id == user_id).first()
     if user:
         user.last_login = now_utc
-        
-    db.commit()
-    db.refresh(log)
+
+    try:
+        db.commit()
+        db.refresh(log)
+    except Exception:
+        db.rollback()
+        raise
 
     # Notification trigger: Login event
     try:
@@ -123,7 +127,11 @@ def record_logout(db: Session, user_id: int) -> bool:
     if user:
         user.last_logout = now_utc
         
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     # Notification trigger: Logout event
     try:

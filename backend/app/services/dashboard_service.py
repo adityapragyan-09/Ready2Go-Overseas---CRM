@@ -6,7 +6,7 @@ import os
 import time
 import sqlite3
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session
 

@@ -34,13 +34,13 @@ class Applicant(Base):
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True, default=dict)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     assigned_to: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True, index=True,
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
     )
     created_by: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True,
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True,
     )
     deleted_by: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True, index=True,
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True,
     )
 
     # ── Soft delete ──────────────────────────────

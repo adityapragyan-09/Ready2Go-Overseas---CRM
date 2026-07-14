@@ -19,7 +19,7 @@ export const ChatWindow = ({ applicantId, currentUser }) => {
       const data = await chatService.getConversation(applicantId);
       setMessages(data);
     } catch (err) {
-      console.error('Failed to load chat feed:', err);
+      // Silent fail - chat load errors are surfaced via EmptyChatState or retry
     } finally {
       setIsLoading(false);
     }

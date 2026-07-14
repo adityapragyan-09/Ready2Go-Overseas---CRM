@@ -5,8 +5,10 @@ Business logic for document management: uploads, listings, signed URL downloads,
 validations (type/size), file-collision prevention, and soft deletes.
 """
 
-import math
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -113,8 +115,18 @@ def create_document(
     )
 
     db.add(document)
-    db.commit()
-    db.refresh(document)
+    try:
+        db.commit()
+        db.refresh(document)
+    except Exception:
+        # Attempt to remove the uploaded storage asset to avoid orphans
+        logger.exception("Failed to save document record. Cleaning up storage path %s.", storage_path)
+        try:
+            delete_file(storage_path)
+        except Exception:
+            pass
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save document record.")
 
     # Log document upload system message
     from app.services.chat_service import log_system_message
@@ -142,7 +154,7 @@ def create_document(
             reference_id=document.id,
         )
     except Exception:
-        pass
+        logger.exception("Failed to send upload notification for document %s.", document.id if document else None)
 
     return document
 
@@ -190,8 +202,13 @@ def soft_delete_document(db: Session, document_id: int, deleted_by: int) -> Docu
     document.deleted_at = datetime.now(timezone.utc)
     document.deleted_by = deleted_by
 
-    db.commit()
-    db.refresh(document)
+    try:
+        db.commit()
+        db.refresh(document)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to soft-delete document %s.", document_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete document.")
 
     # Notification trigger: Document deleted
     try:
@@ -209,6 +226,6 @@ def soft_delete_document(db: Session, document_id: int, deleted_by: int) -> Docu
             reference_id=document.id,
         )
     except Exception:
-        pass
+        logger.exception("Failed to send document deletion notification for document %s.", document_id)
 
     return document

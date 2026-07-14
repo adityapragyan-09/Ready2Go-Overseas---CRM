@@ -47,14 +47,14 @@ export const ApplicantTable = ({
         <table className="w-full text-left border-collapse min-w-[1000px]">
           <thead>
             <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              <th className="py-3.5 px-4">Applicant Name</th>
-              <th className="py-3.5 px-4">Code</th>
-              <th className="py-3.5 px-4">Contact Detail</th>
-              <th className="py-3.5 px-4">Country</th>
-              <th className="py-3.5 px-4">Visa Type</th>
-              <th className="py-3.5 px-4">Status</th>
-              <th className="py-3.5 px-4">Assigned Advisor</th>
-              <th className="py-3.5 px-4 text-right">Actions</th>
+              <th scope="col" className="py-3.5 px-4">Applicant Name</th>
+              <th scope="col" className="py-3.5 px-4">Code</th>
+              <th scope="col" className="py-3.5 px-4">Contact Detail</th>
+              <th scope="col" className="py-3.5 px-4">Country</th>
+              <th scope="col" className="py-3.5 px-4">Visa Type</th>
+              <th scope="col" className="py-3.5 px-4">Status</th>
+              <th scope="col" className="py-3.5 px-4">Assigned Advisor</th>
+              <th scope="col" className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 text-sm">
@@ -128,6 +128,7 @@ export const ApplicantTable = ({
                       onClick={() => onView(applicant.id)}
                       className="p-2 text-slate-400 hover:text-brand-blue hover:bg-brand-blue/5 rounded-xl transition-all duration-200"
                       title="View Details"
+                      aria-label={`View details for ${applicant.full_name}`}
                     >
                       <Eye size={16} />
                     </button>
@@ -135,6 +136,7 @@ export const ApplicantTable = ({
                       onClick={() => onEdit(applicant.id)}
                       className="p-2 text-slate-400 hover:text-brand-orange hover:bg-brand-orange/5 rounded-xl transition-all duration-200"
                       title="Edit Applicant"
+                      aria-label={`Edit ${applicant.full_name}`}
                     >
                       <Edit2 size={16} />
                     </button>
@@ -142,6 +144,7 @@ export const ApplicantTable = ({
                       onClick={() => onDelete(applicant.id, applicant.full_name)}
                       className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
                       title="Delete Record"
+                      aria-label={`Delete ${applicant.full_name}`}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -164,6 +167,7 @@ export const ApplicantTable = ({
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page === 1}
+              aria-label="Previous page"
               className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 active:scale-[0.97] transition-all disabled:opacity-50 disabled:pointer-events-none text-slate-600"
             >
               <ChevronLeft size={16} />
@@ -171,6 +175,7 @@ export const ApplicantTable = ({
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page === totalPages}
+              aria-label="Next page"
               className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 active:scale-[0.97] transition-all disabled:opacity-50 disabled:pointer-events-none text-slate-600"
             >
               <ChevronRight size={16} />

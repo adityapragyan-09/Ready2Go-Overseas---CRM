@@ -38,7 +38,7 @@ def create_access_token(
     name: str,
 ) -> str:
     """
-    Create a JWT access token.
+    Create a JWT access token with standard claims.
 
     Args:
         subject: User ID (stored as 'sub' claim).
@@ -57,6 +57,10 @@ def create_access_token(
         "name": name,
         "iat": now,
         "exp": expire,
+        "iss": settings.APP_NAME,
+        "aud": settings.APP_NAME,
+        "type": "access",
+        "jti": str(subject) + "_" + str(int(now.timestamp())),
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
@@ -64,6 +68,11 @@ def create_access_token(
 def decode_access_token(token: str) -> dict | None:
     """
     Decode and validate a JWT access token.
+
+    Validates:
+        - Signature integrity
+        - Expiration time
+        - Token type ('access')
 
     Returns:
         The decoded payload dict, or None if the token is invalid/expired.
@@ -73,7 +82,10 @@ def decode_access_token(token: str) -> dict | None:
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
+            options={"require": ["sub", "exp", "type"]},
         )
+        if payload.get("type") != "access":
+            return None
         return payload
     except jwt.ExpiredSignatureError:
         return None

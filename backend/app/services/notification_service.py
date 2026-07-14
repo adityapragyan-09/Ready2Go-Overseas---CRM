@@ -61,10 +61,14 @@ def create_notification(
         is_read=False,
     )
 
-    db.add(notification)
-    db.commit()
-    db.refresh(notification)
-    return notification
+    try:
+        db.add(notification)
+        db.commit()
+        db.refresh(notification)
+        return notification
+    except Exception:
+        db.rollback()
+        raise
 
 
 def get_latest_notifications(
@@ -146,8 +150,12 @@ def mark_read(db: Session, notification_id: int, user_id: int, is_admin: bool) -
     if not notif.is_read:
         notif.is_read = True
         notif.read_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(notif)
+        try:
+            db.commit()
+            db.refresh(notif)
+        except Exception:
+            db.rollback()
+            raise
 
     return notif
 
@@ -173,8 +181,12 @@ def mark_all_read(db: Session, user_id: int, is_admin: bool) -> int:
         notif.is_read = True
         notif.read_at = now_utc
 
-    db.commit()
-    return len(unread_notifs)
+    try:
+        db.commit()
+        return len(unread_notifs)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_notification(db: Session, notification_id: int, user_id: int, is_admin: bool) -> Notification:
@@ -198,9 +210,13 @@ def delete_notification(db: Session, notification_id: int, user_id: int, is_admi
             detail="Access restricted to administrators."
         )
 
-    db.delete(notif)
-    db.commit()
-    return notif
+    try:
+        db.delete(notif)
+        db.commit()
+        return notif
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_old_notifications(db: Session, days_limit: int = 30) -> int:
@@ -212,5 +228,9 @@ def delete_old_notifications(db: Session, days_limit: int = 30) -> int:
         .filter(and_(Notification.is_read == True, Notification.created_at < threshold_date))
         .delete()
     )
-    db.commit()
-    return deleted_count
+    try:
+        db.commit()
+        return deleted_count
+    except Exception:
+        db.rollback()
+        raise

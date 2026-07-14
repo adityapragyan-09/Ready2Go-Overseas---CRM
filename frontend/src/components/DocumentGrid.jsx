@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  Search, Eye, FileDown, Trash2, FileText, Globe, Image, GraduationCap, 
-  Sparkles, Landmark, ShieldCheck, Briefcase, Compass, HelpCircle, 
-  X, Calendar, ArrowUpDown, ChevronDown, UserCheck, Trash, MailOpen
+import {
+  Search, Eye, FileDown, Trash2, FileText, Globe, Image, GraduationCap,
+  Sparkles, Landmark, ShieldCheck, Briefcase, Compass, HelpCircle,
+  X, MailOpen
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import documentService from '../services/documentService';

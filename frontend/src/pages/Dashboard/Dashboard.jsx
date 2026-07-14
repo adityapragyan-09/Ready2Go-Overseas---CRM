@@ -1,34 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, 
-  FileText, 
-  MessageSquare, 
-  Bell, 
-  Search, 
-  Plus, 
-  Upload, 
-  UserPlus, 
-  RefreshCw, 
-  TrendingUp, 
-  Activity, 
-  Database, 
-  Cloud, 
-  Server, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
-  Calendar,
-  Layers,
-  Globe,
-  Award
+import {
+  Users,
+  FileText,
+  Bell,
+  Search,
+  Plus,
+  UserPlus,
+  RefreshCw,
+  Activity,
+  Database,
+  Cloud,
+  Server,
+  Clock,
+  CheckCircle2
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../context/NotificationContext';
 import dashboardService from '../../services/dashboardService';
-import PageHeader from '../../components/PageHeader';
 import Card from '../../components/Card';
-import StatusBadge from '../../components/StatusBadge';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import toast from 'react-hot-toast';
 
@@ -53,17 +43,21 @@ export const Dashboard = () => {
   const loadDashboardData = async () => {
     try {
       setIsLoading(true);
-      const summaryData = await dashboardService.getSummary();
-      const chartsData = await dashboardService.getCharts();
-      const recentData = await dashboardService.getRecent();
-      
+      const [summaryData, chartsData, recentData] = await Promise.all([
+        dashboardService.getSummary(),
+        dashboardService.getCharts(),
+        dashboardService.getRecent()
+      ]);
+
       setSummary(summaryData);
       setCharts(chartsData);
       setRecent(recentData);
 
       if (isAdmin) {
-        const empData = await dashboardService.getEmployees();
-        const sysData = await dashboardService.getSystem();
+        const [empData, sysData] = await Promise.all([
+          dashboardService.getEmployees(),
+          dashboardService.getSystem()
+        ]);
         setEmployees(empData);
         setSystem(sysData);
       } else {
@@ -71,10 +65,9 @@ export const Dashboard = () => {
         const selfData = await dashboardService.getEmployees();
         setEmployees(selfData);
       }
-      
+
       await fetchNotifications(1);
     } catch (err) {
-      console.error(err);
       toast.error('Failed to load dashboard statistics.');
     } finally {
       setIsLoading(false);

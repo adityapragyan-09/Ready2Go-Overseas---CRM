@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, ArrowRight, Shield, MessageSquare, Terminal } from 'lucide-react';
+import { User, ArrowRight, MessageSquare, Terminal } from 'lucide-react';
 
 const STATUS_LABELS = {
   inquiry: 'Inquiry',

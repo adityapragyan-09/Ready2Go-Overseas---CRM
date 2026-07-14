@@ -29,7 +29,6 @@ api.interceptors.response.use(
   (error) => {
     // 1. Network level error or timeout
     if (!error.response) {
-      console.error('Network/Server offline error:', error.message);
       return Promise.reject(new Error('Network error. Unable to connect to server.'));
     }
 

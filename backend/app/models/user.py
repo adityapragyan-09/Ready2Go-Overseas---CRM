@@ -41,10 +41,10 @@ class User(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
-    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
-    activity_logs = relationship("ActivityLog", back_populates="user", lazy="dynamic", cascade="all, delete-orphan")
+    activity_logs = relationship("ActivityLog", back_populates="user", lazy="dynamic")
     assigned_applicants = relationship(
         "Applicant", foreign_keys="[Applicant.assigned_to]",
         back_populates="assigned_employee", lazy="dynamic",
