@@ -15,33 +15,39 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 
 if settings.DATABASE_URL.startswith("sqlite"):
+
     engine = create_engine(
         settings.DATABASE_URL,
         connect_args={"check_same_thread": False},
+        future=True,
     )
+
 else:
+
     engine = create_engine(
         settings.DATABASE_URL,
         pool_pre_ping=True,
         pool_recycle=300,
         pool_size=settings.DATABASE_POOL_SIZE,
         max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        connect_args={
+            "sslmode": "require",
+        },
+        future=True,
     )
 
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+SessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False,
+)
 
 
 def get_db() -> Generator[Session, None, None]:
-    """
-    FastAPI dependency that provides a SQLAlchemy session.
-
-    Usage:
-        @router.get("/items")
-        def list_items(db: Session = Depends(get_db)):
-            ...
-    """
     db = SessionLocal()
+
     try:
         yield db
+
     finally:
         db.close()
