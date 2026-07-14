@@ -19,6 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from sqlalchemy import text
 
 from app.api.applicants import router as applicants_router
 from app.api.auth import router as auth_router
