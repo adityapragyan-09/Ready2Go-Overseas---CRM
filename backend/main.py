@@ -90,21 +90,33 @@ def health_check():
     return {"status": "healthy", "app": settings.APP_NAME, "version": settings.APP_VERSION}
 
 
+from sqlalchemy import text
+
+from app.db.session import SessionLocal
+
 @app.get("/ready", tags=["Infrastructure"])
 def readiness_check():
-    """Readiness probe — verifies the app can serve traffic."""
-    from app.db.session import SessionLocal
+    db = None
     try:
         db = SessionLocal()
-        db.execute(db.bind.dialect.statement_compiler(db.bind, db.bind.dialect).__class__.__module__ if hasattr(db.bind, "dialect") else db.bind.dialect.statement_compiler(db.bind, db.bind.dialect).__class__.__module__ or "SELECT 1")
-        db.close()
-        return {"status": "ready", "database": "connected"}
+        db.execute(text("SELECT 1"))
+        return {
+            "status": "ready",
+            "database": "connected",
+        }
     except Exception as exc:
-        logger.error("Readiness check failed", extra={"error": str(exc)})
+        logger.exception("Readiness check failed")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "not ready", "database": "disconnected"},
+            content={
+                "status": "not ready",
+                "database": "disconnected",
+                "error": str(exc),
+            },
         )
+    finally:
+        if db:
+            db.close()
 
 
 @app.get("/live", tags=["Infrastructure"])
