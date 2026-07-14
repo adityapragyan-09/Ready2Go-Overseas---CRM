@@ -58,7 +58,7 @@ def upload_file(file_data, storage_path: str, mime_type: str) -> str:
     headers = _get_headers(mime_type)
 
     try:
-        response = requests.post(url, data=file_data, headers=headers, timeout=600)
+        response = requests.post(url, data=file_data, headers=headers, timeout=settings.UPLOAD_TIMEOUT_SECONDS)
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -89,7 +89,7 @@ def delete_file(storage_path: str) -> None:
     headers["Content-Type"] = "application/json"
 
     try:
-        response = requests.delete(url, json={"prefixes": [storage_path]}, headers=headers, timeout=30)
+        response = requests.delete(url, json={"prefixes": [storage_path]}, headers=headers, timeout=60)
         if response.status_code not in (200, 204):
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -117,7 +117,7 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     headers["Content-Type"] = "application/json"
 
     try:
-        response = requests.post(url, json={"expiresIn": expires_in}, headers=headers, timeout=30)
+        response = requests.post(url, json={"expiresIn": expires_in}, headers=headers, timeout=60)
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,

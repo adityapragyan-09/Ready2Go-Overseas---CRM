@@ -11,7 +11,7 @@ python-multipart==0.0.20
 # Database
 sqlalchemy==2.0.41
 alembic==1.16.2
-# psycopg2-binary==2.9.10
+psycopg2-binary==2.9.10
 
 # Configuration
 pydantic>=2.13.4

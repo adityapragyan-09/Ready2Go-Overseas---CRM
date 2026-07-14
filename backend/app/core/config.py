@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = 10
 
     # ── CORS ─────────────────────────────────────
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str
 
     # ── Document Management ──────────────────────
     SUPABASE_URL: str
@@ -96,8 +96,12 @@ if settings.ENVIRONMENT.lower() == "production":
         raise RuntimeError("SECRET_KEY must be set in production environment")
     if not settings.JWT_SECRET_KEY:
         raise RuntimeError("JWT_SECRET_KEY must be provided in production environment")
+    if not settings.FRONTEND_URL:
+        raise RuntimeError("FRONTEND_URL must be configured for CORS in production")
     if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
-        raise RuntimeError("Supabase credentials must be provided in production environment")
+        raise RuntimeError("Supabase credentials (SUPABASE_URL, SUPABASE_KEY) must be provided in production")
+    if settings.DATABASE_URL.startswith("sqlite"):
+        raise RuntimeError("SQLite is not supported in production. Use a PostgreSQL-compatible database URL.")
 
-if not settings.SECRET_KEY and not settings.JWT_SECRET_KEY:
-    raise RuntimeError("SECRET_KEY and JWT_SECRET_KEY must be configured in .env")
+if not settings.SECRET_KEY or not settings.JWT_SECRET_KEY:
+    raise RuntimeError("SECRET_KEY and JWT_SECRET_KEY must both be configured in .env")
