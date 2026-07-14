@@ -21,7 +21,7 @@ export const ApplicantTable = ({
   const getEmployeeName = (id) => {
     if (!id) return null;
     const emp = employees.find(e => e.id === Number(id) || e.id === id);
-    return emp ? emp.name : `Advisor #${id}`;
+    return emp ? (emp.full_name || emp.name || `Advisor #${id}`) : `Advisor #${id}`;
   };
 
   const getVisaBadge = (type) => {
@@ -111,10 +111,10 @@ export const ApplicantTable = ({
                   {applicant.assigned_to ? (
                     <div className="flex items-center gap-1.5">
                       <div className="w-5 h-5 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 text-[10px] font-bold">
-                        {getEmployeeName(applicant.assigned_to).substring(0, 2).toUpperCase()}
+                        {(getEmployeeName(applicant.assigned_to) || 'NA').substring(0, 2).toUpperCase()}
                       </div>
                       <span className="font-semibold text-slate-700 text-xs">
-                        {getEmployeeName(applicant.assigned_to)}
+                        {getEmployeeName(applicant.assigned_to) || 'Advisor'}
                       </span>
                     </div>
                   ) : (

@@ -24,6 +24,8 @@ from app.api.documents import router as documents_router
 from app.api.progress import router as progress_router
 from app.api.chat import router as chat_router
 from app.api.notifications import router as notifications_router
+from app.api.dashboard import router as dashboard_router
+from app.api.activity_logs import router as activity_logs_router
 from app.core.config import settings
 from app.middlewares.cors import setup_cors
 from app.utils.response import error_response
@@ -35,6 +37,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
+    redirect_slashes=False,
 )
 
 # ── Middleware ───────────────────────────────────
@@ -54,6 +57,8 @@ app.include_router(documents_router, prefix=f"{settings.API_PREFIX}/documents", 
 app.include_router(progress_router, prefix=f"{settings.API_PREFIX}/progress", tags=["Progress"])
 app.include_router(chat_router, prefix=f"{settings.API_PREFIX}/chat", tags=["Chat"])
 app.include_router(notifications_router, prefix=f"{settings.API_PREFIX}/notifications", tags=["Notifications"])
+app.include_router(dashboard_router, prefix=f"{settings.API_PREFIX}/dashboard", tags=["Dashboard"])
+app.include_router(activity_logs_router, prefix=f"{settings.API_PREFIX}/activity-logs", tags=["Activity Logs"])
 
 
 # ── Health check ─────────────────────────────────

@@ -82,7 +82,7 @@ class ApplicantResponse(BaseModel):
     country: str | None = None
     visa_type: str
     status: str
-    metadata_: dict[str, Any] | None = Field(default=None, alias="metadata")
+    metadata_: dict[str, Any] | None = Field(default=None, alias="metadata", validation_alias="metadata_")
     notes: str | None = None
     assigned_to: int | None = None
     created_by: int

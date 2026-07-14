@@ -44,7 +44,7 @@ def get_unread_count_route(
 
 # ── GET / ───────────────────────────────────
 
-@router.get("/")
+@router.get("")
 def list_notifications_route(
     page: int = Query(default=1, ge=1),
     page_size: int | None = Query(default=None, ge=1),

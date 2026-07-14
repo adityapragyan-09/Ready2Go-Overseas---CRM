@@ -11,8 +11,7 @@ Usage:
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.constants import INQUIRY
@@ -32,7 +31,7 @@ class Applicant(Base):
     country: Mapped[str | None] = mapped_column(String(80), nullable=True)
     visa_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default=INQUIRY)
-    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True, default=dict)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True, default=dict)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     assigned_to: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True, index=True,

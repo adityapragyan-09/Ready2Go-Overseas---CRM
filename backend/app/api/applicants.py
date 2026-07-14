@@ -42,7 +42,7 @@ router = APIRouter()
 
 # ── POST / ──────────────────────────────────
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 def create_applicant_route(
     body: ApplicantCreate,
     db: Session = Depends(get_db),
@@ -63,7 +63,7 @@ def create_applicant_route(
 
 # ── GET / ───────────────────────────────────
 
-@router.get("/")
+@router.get("")
 def list_applicants_route(
     filters: ApplicantFilterParams = Depends(),
     pagination: PaginationParams = Depends(),

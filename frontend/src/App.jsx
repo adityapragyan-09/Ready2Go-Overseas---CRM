@@ -9,6 +9,8 @@ import Login from './pages/Auth/Login';
 import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import ApplicantsPage from './pages/Applicants/ApplicantsPage';
 
+import Dashboard from './pages/Dashboard/Dashboard';
+
 // Reusable components
 import Card from './components/Card';
 import PageHeader from './components/PageHeader';
@@ -19,53 +21,7 @@ import Forbidden from './pages/Errors/Forbidden';
 import NotFound from './pages/Errors/NotFound';
 import ServerError from './pages/Errors/ServerError';
 
-// Placeholder dashboards
-const DashboardPlaceholder = () => {
-  useDocumentTitle('Dashboard');
-  return (
-    <div className="space-y-6">
-      <PageHeader 
-        title="System Overview" 
-        subtitle="Advisor metrics and applicant queues at a glance"
-        breadcrumbs={[{ label: 'Home', path: '/dashboard' }]}
-      />
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <span className="text-xs font-bold text-brand-orange uppercase tracking-wider">Applicant Queue</span>
-          <h3 className="text-3xl font-extrabold text-slate-800 mt-2">--</h3>
-          <p className="text-xs text-slate-400 mt-1">Active files under review</p>
-        </Card>
-        <Card>
-          <span className="text-xs font-bold text-brand-orange uppercase tracking-wider">Document Checklist</span>
-          <h3 className="text-3xl font-extrabold text-slate-800 mt-2">--</h3>
-          <p className="text-xs text-slate-400 mt-1">Pending client uploads</p>
-        </Card>
-        <Card>
-          <span className="text-xs font-bold text-brand-orange uppercase tracking-wider">Internal Chat Room</span>
-          <h3 className="text-3xl font-extrabold text-slate-800 mt-2">--</h3>
-          <p className="text-xs text-slate-400 mt-1">Unread advisor messages</p>
-        </Card>
-      </div>
-    </div>
-  );
-};
-
-const LogsPlaceholder = () => {
-  useDocumentTitle('System Activity Logs');
-  return (
-    <div className="space-y-6">
-      <PageHeader 
-        title="Activity Logs" 
-        subtitle="Real-time system login and event auditing"
-        breadcrumbs={[{ label: 'Home', path: '/dashboard' }, { label: 'Audit logs' }]}
-      />
-      <Card title="Authentication Audit Stream">
-        <p className="text-sm text-slate-500">Log history for internal security oversight.</p>
-      </Card>
-    </div>
-  );
-};
+import { ActivityLogs } from './pages/ActivityLogs/ActivityLogs';
 
 function App() {
   return (
@@ -96,10 +52,10 @@ function App() {
 
           {/* Protected Area wrapping DashboardLayout */}
           <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-            <Route path="/dashboard" element={<DashboardPlaceholder />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/applicants" element={<ApplicantsPage />} />
             <Route path="/employees" element={<EmployeeManagement />} />
-            <Route path="/activity-logs" element={<LogsPlaceholder />} />
+            <Route path="/activity-logs" element={<ActivityLogs />} />
           </Route>
 
           {/* System Error Views */}

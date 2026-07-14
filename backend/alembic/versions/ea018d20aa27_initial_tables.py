@@ -52,7 +52,7 @@ def upgrade() -> None:
     sa.Column('country', sa.String(length=80), nullable=True),
     sa.Column('visa_type', sa.String(length=30), nullable=False),
     sa.Column('status', sa.String(length=30), nullable=False),
-    sa.Column('metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('metadata', sa.JSON(), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('assigned_to', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),

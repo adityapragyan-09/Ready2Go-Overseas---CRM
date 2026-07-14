@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { 
   Plus, Search, UserCheck, UserX, UserPlus, Key, ShieldAlert, X,
@@ -241,8 +241,8 @@ const EmployeeDetailsDrawer = ({ employee, onClose }) => {
   );
 };
 
-// ── 5. Employee Form Component ──────────────────
-const EmployeeForm = ({ employee, isSubmitting, onSubmit, onClose }) => {
+// ── 5. Employee Form Component (Full-Page) ──────────────────
+const EmployeeForm = ({ employee, isSubmitting, onSubmit, onCancel }) => {
   const [name, setName] = useState(employee?.full_name || '');
   const [email, setEmail] = useState(employee?.email || '');
   const [phone, setPhone] = useState(employee?.phone || '');
@@ -254,10 +254,8 @@ const EmployeeForm = ({ employee, isSubmitting, onSubmit, onClose }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (employee) {
-      // Edit
       onSubmit({ full_name: name, phone, role, designation, department });
     } else {
-      // Create
       onSubmit({ full_name: name, email, phone, password, role, designation, department });
     }
   };
@@ -272,121 +270,109 @@ const EmployeeForm = ({ employee, isSubmitting, onSubmit, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
-      <div onClick={onClose} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-      
-      <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between p-6 animate-slide-left z-10 border-l border-slate-100 text-left">
-        <div className="space-y-6 flex-1 overflow-y-auto pr-1">
-          <div>
-            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <UserPlus className="text-brand-orange" size={20} />
-              {employee ? `Modify Staff: ${employee.full_name}` : 'Provision Staff Member'}
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">Configure credentials and profile parameters.</p>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Two-column grid for fields */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Input
+          label="Full Name"
+          placeholder="Rahul Sharma"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+
+        <Input
+          label="Email Address"
+          type="email"
+          placeholder="counselor@ready2gooverseas.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={!!employee}
+        />
+
+        <Input
+          label="Phone Number"
+          placeholder="+91 98765 43210"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+
+        {!employee && (
+          <div className="relative">
+            <Input
+              label="Access Password"
+              placeholder="Minimum 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={generateAutoPassword}
+              className="absolute right-3 top-[37px] px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors"
+            >
+              Auto
+            </button>
           </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Full Name"
-              placeholder="Rahul Sharma"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-            
-            <Input
-              label="Email Address"
-              type="email"
-              placeholder="counselor@ready2gooverseas.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={!!employee}
-            />
+        <Input
+          label="Designation"
+          placeholder="e.g. Senior Counselor"
+          value={designation}
+          onChange={(e) => setDesignation(e.target.value)}
+        />
 
-            <Input
-              label="Phone Number"
-              placeholder="+91 98765 43210"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
+        <Input
+          label="Department"
+          placeholder="e.g. Australia Admissions"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+        />
+      </div>
 
-            {!employee && (
-              <div className="relative">
-                <Input
-                  label="Access Password"
-                  placeholder="Minimum 6 characters"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={generateAutoPassword}
-                  className="absolute right-3 top-[37px] px-2 py-1 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors"
-                >
-                  Auto
-                </button>
-              </div>
-            )}
-
-            <Input
-              label="Designation"
-              placeholder="e.g. Senior Counselor"
-              value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
-            />
-
-            <Input
-              label="Department"
-              placeholder="e.g. Australia Admissions"
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-            />
-
-            {/* Role Privilege Selection */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Role Privilege
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRole('employee')}
-                  className={`px-4 py-3 rounded-xl border text-xs font-bold text-center transition-all duration-200
-                    ${role === 'employee' 
-                      ? 'border-brand-orange bg-brand-orange/5 text-brand-orange' 
-                      : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-                    }
-                  `}
-                >
-                  Counselor (Staff)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('admin')}
-                  className={`px-4 py-3 rounded-xl border text-xs font-bold text-center transition-all duration-200
-                    ${role === 'admin' 
-                      ? 'border-rose-500 bg-rose-50 text-rose-600' 
-                      : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-                    }
-                  `}
-                >
-                  Administrator
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-
-        <div className="flex gap-3 pt-6 border-t border-slate-100 mt-6 shrink-0">
-          <Button onClick={onClose} variant="outline" className="w-1/3" disabled={isSubmitting}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="secondary" className="w-2/3" isLoading={isSubmitting}>
-            {employee ? 'Save Changes' : 'Confirm Account'}
-          </Button>
+      {/* Role Privilege Selection */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          Role Privilege
+        </label>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <button
+            type="button"
+            onClick={() => setRole('employee')}
+            className={`px-4 py-3.5 rounded-xl border text-xs font-bold text-center transition-all duration-200
+              ${role === 'employee'
+                ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-sm shadow-brand-orange/10'
+                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              }
+            `}
+          >
+            Counselor (Staff)
+          </button>
+          <button
+            type="button"
+            onClick={() => setRole('admin')}
+            className={`px-4 py-3.5 rounded-xl border text-xs font-bold text-center transition-all duration-200
+              ${role === 'admin'
+                ? 'border-rose-500 bg-rose-50 text-rose-600 shadow-sm shadow-rose-500/10'
+                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              }
+            `}
+          >
+            Administrator
+          </button>
         </div>
       </div>
-    </div>
+
+      {/* Form Action Buttons */}
+      <div className="flex gap-3 pt-4 border-t border-slate-100">
+        <Button onClick={onCancel} variant="outline" className="w-1/3" disabled={isSubmitting} type="button">Cancel</Button>
+        <Button type="submit" variant="secondary" className="w-2/3" isLoading={isSubmitting}>
+          {employee ? 'Save Changes' : 'Confirm & Create Account'}
+        </Button>
+      </div>
+    </form>
   );
 };
 
@@ -477,11 +463,26 @@ const EmployeeProfile = ({ currentUser }) => {
 export const EmployeeManagement = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const [activeTab, setActiveTab] = useState(isAdmin ? 'directory' : 'profile');
+
+  // BUG FIX: Always initialize to 'profile' (safe default) to avoid the race
+  // condition where user is null on first render. A separate useEffect below
+  // syncs this to 'directory' once the admin role is confirmed from the API.
+  const [activeTab, setActiveTab] = useState('profile');
+
+  // BUG FIX: Sync activeTab to 'directory' once admin role is confirmed.
+  // This handles the async auth check in AuthContext that resolves after mount.
+  useEffect(() => {
+    if (isAdmin) {
+      setActiveTab('directory');
+    }
+  }, [isAdmin]);
 
   // List states
   const [employees, setEmployees] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // BUG FIX: Initialize isLoading to false. The loading state is managed
+  // entirely inside fetchEmployees which guards on isAdmin first — preventing
+  // counselors from being stuck with isLoading=true indefinitely.
+  const [isLoading, setIsLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
 
@@ -492,10 +493,36 @@ export const EmployeeManagement = () => {
   const [status, setStatus] = useState('');
 
   // Modals & Panels
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeEmployee, setActiveEmployee] = useState(null);
   const [detailsEmployee, setDetailsEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Deep-link: detect ?view=add from URL (used by Dashboard quick action)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get('view') || 'list';
+  const editId = searchParams.get('id');
+
+  // If action=add is in URL (legacy deep-link from Dashboard), redirect to view=add
+  useEffect(() => {
+    if (searchParams.get('action') === 'add' && isAdmin) {
+      searchParams.delete('action');
+      searchParams.set('view', 'add');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [isAdmin]);
+
+  // Sync activeEmployee if edit view is requested directly via URL query params
+  useEffect(() => {
+    if (view === 'edit' && editId && !activeEmployee && employees.length > 0) {
+      const emp = employees.find(e => e.id === Number(editId) || e.id === editId);
+      if (emp) {
+        setActiveEmployee(emp);
+      } else {
+        // Fallback if employee is not found in local state list
+        navigate('/employees');
+      }
+    }
+  }, [view, editId, employees, activeEmployee]);
 
   // Reset Credentials Card
   const [newCredentials, setNewCredentials] = useState(null);
@@ -527,7 +554,7 @@ export const EmployeeManagement = () => {
 
   useEffect(() => {
     fetchEmployees();
-  }, [search, role, dept, status, page, activeTab]);
+  }, [search, role, dept, status, page, activeTab, isAdmin]);
 
   const handleResetFilters = () => {
     setSearch('');
@@ -583,7 +610,7 @@ export const EmployeeManagement = () => {
         const res = await api.put(`/employees/${activeEmployee.id}`, payload);
         if (res.data && res.data.success) {
           toast.success('Employee updated.');
-          setDrawerOpen(false);
+          setSearchParams({ view: 'list' });
           setActiveEmployee(null);
           fetchEmployees();
         }
@@ -598,7 +625,7 @@ export const EmployeeManagement = () => {
             password: payload.password,
             role: payload.role
           });
-          setDrawerOpen(false);
+          setSearchParams({ view: 'list' });
           fetchEmployees();
         }
       }
@@ -616,6 +643,32 @@ export const EmployeeManagement = () => {
     toast.success('Credentials copied to clipboard!');
   };
 
+  // ── RENDER: Add/Edit Full-Page Form View ──────────
+  if (view === 'add' || view === 'edit') {
+    return (
+      <div className="space-y-6 text-left animate-fade-in">
+        <PageHeader
+          title={view === 'add' ? 'Add Staff Account' : 'Edit Staff Account'}
+          subtitle={view === 'add' ? 'Provision a new staff member with CRM access credentials' : `Updating staff profile`}
+          breadcrumbs={[
+            { label: 'Home', path: '/dashboard' },
+            { label: 'Employees', path: '/employees' },
+            { label: view === 'add' ? 'New Account' : 'Edit' }
+          ]}
+        />
+        <Card>
+          <EmployeeForm
+            employee={activeEmployee}
+            isSubmitting={isSubmitting}
+            onSubmit={handleFormSubmit}
+            onCancel={() => { setActiveEmployee(null); navigate('/employees'); }}
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  // ── RENDER: Main Directory / Profile View ────────
   return (
     <div className="space-y-6 text-left">
       <PageHeader 
@@ -624,7 +677,7 @@ export const EmployeeManagement = () => {
         breadcrumbs={[{ label: 'Home', path: '/dashboard' }, { label: 'Employees' }]}
         action={
           isAdmin && activeTab === 'directory' && (
-            <Button onClick={() => { setActiveEmployee(null); setDrawerOpen(true); }} variant="secondary" className="flex items-center gap-2">
+            <Button onClick={() => { setActiveEmployee(null); setSearchParams({ view: 'add' }); }} variant="secondary" className="flex items-center gap-2">
               <Plus size={15} /> Add Staff Account
             </Button>
           )
@@ -661,24 +714,30 @@ export const EmployeeManagement = () => {
             <div className="p-4 border border-emerald-100 bg-emerald-50/50 backdrop-blur-md rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-scale-up">
               <div className="flex gap-3">
                 <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
-                  <CheckCircle2 size={18} />
+                  <CheckCircle2 size={20} />
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800">Account Credentials Initialized</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 mt-2 bg-white border border-slate-100 p-2.5 rounded-xl text-[10px] text-slate-500 font-semibold">
-                    <p>Email: <span className="text-slate-800 font-bold">{newCredentials.email}</span></p>
-                    <p>Password: <code className="bg-slate-50 px-1 py-0.2 rounded text-red-600 font-mono font-bold">{newCredentials.password}</code></p>
-                  </div>
+                <div className="text-left">
+                  <p className="text-sm font-bold text-emerald-700">Account Created Successfully</p>
+                  <p className="text-xs text-emerald-600 font-mono mt-0.5">
+                    {newCredentials.email} / <span className="font-black">{newCredentials.password}</span>
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2 shrink-0">
-                <Button onClick={copyCredsToClipboard} variant="outline" size="sm" className="flex items-center gap-1.5"><Copy size={12} /> Copy</Button>
-                <Button onClick={() => setNewCredentials(null)} variant="primary" size="sm">Dismiss</Button>
+                <Button onClick={copyCredsToClipboard} variant="outline" className="text-xs flex items-center gap-1.5">
+                  <Copy size={12} /> Copy
+                </Button>
+                <button
+                  onClick={() => setNewCredentials(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all"
+                  title="Dismiss"
+                >
+                  <X size={14} />
+                </button>
               </div>
             </div>
           )}
 
-          {/* Filters */}
           <EmployeeFilters
             search={search} setSearch={setSearch}
             role={role} setRole={setRole}
@@ -687,75 +746,73 @@ export const EmployeeManagement = () => {
             onReset={handleResetFilters}
           />
 
-          {/* Table list */}
           <Card>
             {isLoading ? (
-              <div className="py-12 flex justify-center"><LoadingSpinner label="Loading staff directory..." /></div>
+              <div className="py-24 flex justify-center">
+                <LoadingSpinner label="Loading employee directory..." />
+              </div>
             ) : employees.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-xs font-bold">No active employees found matching query.</div>
+              <EmptyState title="No Employees Found" description="Adjust your filters or create a new staff account." />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="overflow-x-auto -mx-6 px-6">
+                <table className="w-full text-left border-collapse min-w-[800px]">
                   <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      <th className="py-3 px-4">Employee Code</th>
-                      <th className="py-3 px-4">Name / Contact</th>
-                      <th className="py-3 px-4">Role</th>
-                      <th className="py-3 px-4">Department / Title</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Last Login</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
+                    <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="py-3.5 px-4">Employee Code</th>
+                      <th className="py-3.5 px-4">Name / Contact</th>
+                      <th className="py-3.5 px-4">Role</th>
+                      <th className="py-3.5 px-4">Department / Title</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50 font-semibold text-slate-600">
+                  <tbody className="divide-y divide-slate-50 text-sm">
                     {employees.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3.5 px-4 font-mono font-bold text-slate-400">{emp.employee_code || 'EMP-XXXXXX'}</td>
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full border flex items-center justify-center text-[10px] font-black bg-slate-50 text-brand-orange shrink-0">
-                              {emp.profile_photo ? <img src={emp.profile_photo} alt="" className="w-full h-full object-cover rounded-full" /> : emp.full_name?.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-bold text-slate-800 leading-none mb-1">{emp.full_name}</span>
-                              <span className="text-[10px] text-slate-400 leading-none">{emp.email}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
-                            emp.role === 'admin' ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-brand-orange/5 text-brand-orange border border-brand-orange/10'
-                          }`}>
-                            {emp.role === 'admin' ? 'Admin' : 'Counselor'}
+                      <tr key={emp.id} className="group hover:bg-slate-50/50 transition-colors cursor-pointer"
+                          onClick={() => setDetailsEmployee(emp)}>
+                        <td className="py-4 px-4">
+                          <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 border border-slate-200/60 px-2 py-1 rounded">
+                            {emp.employee_code || 'EMP-NEW'}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4">
-                          <div className="flex flex-col">
-                            <span className="text-slate-800 leading-none mb-1">{emp.designation || 'Staff Counselor'}</span>
-                            <span className="text-[9px] text-slate-400 leading-none">{emp.department || 'Advising'}</span>
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-xs shrink-0">
+                              {emp.full_name?.substring(0, 2).toUpperCase() || 'ST'}
+                            </div>
+                            <div className="flex flex-col text-left">
+                              <span className="font-bold text-slate-800">{emp.full_name}</span>
+                              <span className="text-[10px] text-slate-400 font-medium">{emp.email}</span>
+                            </div>
                           </div>
                         </td>
-                        <td className="py-3.5 px-4">
+                        <td className="py-4 px-4">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                            emp.role === 'admin' 
+                              ? 'text-rose-600 bg-rose-50 border-rose-100' 
+                              : 'text-sky-600 bg-sky-50 border-sky-100'
+                          }`}>
+                            <ShieldAlert size={10} />
+                            {emp.role === 'admin' ? 'Administrator' : 'Counselor'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col text-left">
+                            <span className="font-semibold text-slate-700 text-xs">{emp.designation || 'Staff Counselor'}</span>
+                            <span className="text-[10px] text-slate-400">{emp.department || 'General'}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4">
                           <EmployeeStatusBadge isActive={emp.is_active} />
                         </td>
-                        <td className="py-3.5 px-4 text-slate-400 text-[10px]">
-                          {emp.last_login ? new Date(emp.last_login).toLocaleDateString() : 'Never'}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex gap-1 justify-end">
+                        <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
                             <button
-                              onClick={() => setDetailsEmployee(emp)}
-                              className="p-1.5 text-slate-400 hover:text-brand-blue hover:bg-brand-blue/5 rounded-lg transition-all"
-                              title="Details File"
+                              onClick={() => { setActiveEmployee(emp); setSearchParams({ view: 'edit', id: emp.id }); }}
+                              className="p-1.5 text-slate-400 hover:text-brand-orange hover:bg-brand-orange/5 rounded-lg transition-all"
+                              title="Edit Employee"
                             >
                               <Eye size={13} />
-                            </button>
-                            <button
-                              onClick={() => { setActiveEmployee(emp); setDrawerOpen(true); }}
-                              className="p-1.5 text-slate-400 hover:text-brand-orange hover:bg-brand-orange/5 rounded-lg transition-all"
-                              title="Modify Registry"
-                            >
-                              <RefreshCw size={13} />
                             </button>
                             <button
                               onClick={() => handlePasswordReset(emp)}
@@ -792,16 +849,6 @@ export const EmployeeManagement = () => {
         <EmployeeProfile currentUser={user} />
       )}
 
-      {/* Drawer Create/Edit form */}
-      {drawerOpen && (
-        <EmployeeForm
-          employee={activeEmployee}
-          isSubmitting={isSubmitting}
-          onSubmit={handleFormSubmit}
-          onClose={() => { setDrawerOpen(false); setActiveEmployee(null); }}
-        />
-      )}
-
       {/* Details drawer overlay */}
       {detailsEmployee && (
         <EmployeeDetailsDrawer
@@ -812,5 +859,6 @@ export const EmployeeManagement = () => {
     </div>
   );
 };
+
 
 export default EmployeeManagement;

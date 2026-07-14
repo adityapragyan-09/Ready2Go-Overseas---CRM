@@ -39,9 +39,14 @@ api.interceptors.response.use(
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
       
-      // Prevent infinite redirect loops on the login page
+      // BUG FIX: Use history.pushState + popstate event instead of
+      // window.location.href which causes a full page reload, destroys the
+      // React app state, and leaves the Login page title on the /dashboard URL.
+      // React Router's BrowserRouter listens to the popstate event and will
+      // re-render the correct route without a hard reload.
       if (!window.location.pathname.endsWith('/login')) {
-        window.location.href = '/login?expired=true';
+        window.history.pushState({}, '', '/login?expired=true');
+        window.dispatchEvent(new PopStateEvent('popstate'));
       }
     }
     

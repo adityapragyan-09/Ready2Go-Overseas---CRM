@@ -67,7 +67,7 @@ def update_own_profile(
 
 # ── GET / ───────────────────────────────────
 
-@router.get("/")
+@router.get("")
 def list_employees_route(
     search: str | None = Query(default=None),
     role: str | None = Query(default=None),
@@ -108,7 +108,7 @@ def list_employees_route(
 
 # ── POST / ──────────────────────────────────
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 def create_employee_route(
     body: EmployeeCreate,
     db: Session = Depends(get_db),

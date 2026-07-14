@@ -20,20 +20,30 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # ── applicant_code (unique, not-null) ────────
     # Add as nullable first, backfill, then set NOT NULL.
-    op.add_column('applicants', sa.Column('applicant_code', sa.String(length=20), nullable=True))
+    with op.batch_alter_table('applicants') as batch_op:
+        batch_op.add_column(sa.Column('applicant_code', sa.String(length=20), nullable=True))
 
     # Backfill existing rows with APP-{id zero-padded}
-    op.execute(
-        "UPDATE applicants SET applicant_code = 'APP-' || LPAD(CAST(id AS TEXT), 6, '0') "
-        "WHERE applicant_code IS NULL"
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        op.execute(
+            "UPDATE applicants SET applicant_code = 'APP-' || substr('000000' || id, -6) "
+            "WHERE applicant_code IS NULL"
+        )
+    else:
+        op.execute(
+            "UPDATE applicants SET applicant_code = 'APP-' || LPAD(CAST(id AS TEXT), 6, '0') "
+            "WHERE applicant_code IS NULL"
+        )
 
-    op.alter_column('applicants', 'applicant_code', nullable=False)
-    op.create_index('ix_applicants_applicant_code', 'applicants', ['applicant_code'], unique=True)
+    with op.batch_alter_table('applicants') as batch_op:
+        batch_op.alter_column('applicant_code', nullable=False)
+        batch_op.create_index('ix_applicants_applicant_code', ['applicant_code'], unique=True)
 
     # ── created_by (FK to users.id) ──────────────
     # Add as nullable first, backfill with the first admin user, then set NOT NULL.
-    op.add_column('applicants', sa.Column('created_by', sa.Integer(), nullable=True))
+    with op.batch_alter_table('applicants') as batch_op:
+        batch_op.add_column(sa.Column('created_by', sa.Integer(), nullable=True))
 
     # Backfill: use the lowest user id as the creator for existing rows
     op.execute(
@@ -41,17 +51,18 @@ def upgrade() -> None:
         "WHERE created_by IS NULL"
     )
 
-    op.alter_column('applicants', 'created_by', nullable=False)
-    op.create_foreign_key('fk_applicants_created_by', 'applicants', 'users', ['created_by'], ['id'])
-    op.create_index('ix_applicants_created_by', 'applicants', ['created_by'], unique=False)
+    with op.batch_alter_table('applicants') as batch_op:
+        batch_op.alter_column('created_by', nullable=False)
+        batch_op.create_foreign_key('fk_applicants_created_by', 'users', ['created_by'], ['id'])
+        batch_op.create_index('ix_applicants_created_by', ['created_by'], unique=False)
 
     # ── Soft delete fields ───────────────────────
-    op.add_column('applicants', sa.Column('is_deleted', sa.Boolean(), nullable=False, server_default='false'))
-    op.add_column('applicants', sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True))
-
-    # ── Composite indexes for common queries ─────
-    op.create_index('ix_applicants_active_created', 'applicants', ['is_deleted', 'created_at'])
-    op.create_index('ix_applicants_active_status', 'applicants', ['is_deleted', 'status'])
+    with op.batch_alter_table('applicants') as batch_op:
+        batch_op.add_column(sa.Column('is_deleted', sa.Boolean(), nullable=False, server_default='false'))
+        batch_op.add_column(sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True))
+        # ── Composite indexes for common queries ─────
+        batch_op.create_index('ix_applicants_active_created', ['is_deleted', 'created_at'])
+        batch_op.create_index('ix_applicants_active_status', ['is_deleted', 'status'])
 
 
 def downgrade() -> None:

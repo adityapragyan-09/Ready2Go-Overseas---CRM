@@ -123,20 +123,23 @@ export const ApplicantsPage = () => {
     }
   };
 
-  // Fetch employees lookup
+  // Fetch employees lookup (admin-only endpoint — guard on role)
+  // BUG FIX: The /employees endpoint requires admin role. Without the guard,
+  // every counselor visiting this page receives a 403 error in the console.
   useEffect(() => {
+    if (!user || user.role !== 'admin') return;
     const fetchEmployees = async () => {
       try {
         const res = await api.get('/employees');
         if (res.data && res.data.success) {
-          setEmployees(res.data.data);
+          setEmployees(res.data.data.items || []);
         }
       } catch (err) {
         console.error('Failed to load employee list', err);
       }
     };
     fetchEmployees();
-  }, []);
+  }, [user?.role]);
 
   // Sync visa_type from URL sidebar tabs into filter state
   useEffect(() => {

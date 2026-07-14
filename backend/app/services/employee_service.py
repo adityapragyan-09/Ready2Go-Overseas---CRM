@@ -276,3 +276,47 @@ def reset_employee_password(db: Session, employee_id: int, new_password: str) ->
         pass
 
     return user
+
+
+def list_activity_logs(
+    db: Session,
+    user_id: int | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[int, list]:
+    """
+    Retrieve audit logs database rows joining with User model for employee metadata.
+    """
+    from app.models.activity_log import ActivityLog
+    from app.models.user import User
+
+    query = db.query(ActivityLog, User.name, User.employee_code).join(User, ActivityLog.user_id == User.id)
+
+    if user_id is not None:
+        query = query.filter(ActivityLog.user_id == user_id)
+
+    total_count = query.count()
+    offset = (page - 1) * page_size
+    
+    results = (
+        query.order_by(ActivityLog.login_time.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    items = []
+    for log, name, code in results:
+        items.append({
+            "id": log.id,
+            "user_id": log.user_id,
+            "employee_name": name,
+            "employee_code": code,
+            "login_time": log.login_time,
+            "logout_time": log.logout_time,
+            "ip_address": log.ip_address,
+            "browser": log.browser,
+            "device": log.device,
+        })
+
+    return total_count, items
