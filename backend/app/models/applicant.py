@@ -11,7 +11,7 @@ Usage:
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +23,9 @@ class Applicant(Base):
     __tablename__ = "applicants"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    applicant_code: Mapped[str] = mapped_column(
+        String(20), unique=True, nullable=False, index=True,
+    )
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     email: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -32,8 +35,22 @@ class Applicant(Base):
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True, default=dict)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     assigned_to: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True, index=True
+        Integer, ForeignKey("users.id"), nullable=True, index=True,
     )
+    created_by: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True,
+    )
+    deleted_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True, index=True,
+    )
+
+    # ── Soft delete ──────────────────────────────
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
+    # ── Timestamps ───────────────────────────────
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -46,10 +63,29 @@ class Applicant(Base):
         nullable=False,
     )
 
-    # Relationships
-    assigned_employee = relationship("User", back_populates="assigned_applicants")
-    documents = relationship("Document", back_populates="applicant", lazy="dynamic")
-    messages = relationship("Message", back_populates="applicant", lazy="dynamic")
+    # ── Composite indexes ────────────────────────
+    __table_args__ = (
+        Index("ix_applicants_active_created", "is_deleted", "created_at"),
+        Index("ix_applicants_active_status", "is_deleted", "status"),
+    )
+
+    # ── Relationships ────────────────────────────
+    assigned_employee = relationship(
+        "User", foreign_keys=[assigned_to], back_populates="assigned_applicants",
+    )
+    creator = relationship(
+        "User", foreign_keys=[created_by], back_populates="created_applicants",
+    )
+    deleter = relationship(
+        "User", foreign_keys=[deleted_by], back_populates="deleted_applicants",
+    )
+    documents = relationship("Document", back_populates="applicant", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="applicant", cascade="all, delete-orphan")
+    progress_history = relationship("ProgressHistory", back_populates="applicant", cascade="all, delete-orphan")
+
+    @property
+    def created_by_name(self) -> str:
+        return self.creator.name if self.creator else "System"
 
     def __repr__(self) -> str:
-        return f"<Applicant {self.full_name} ({self.visa_type})>"
+        return f"<Applicant {self.applicant_code} — {self.full_name} ({self.visa_type})>"

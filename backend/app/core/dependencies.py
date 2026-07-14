@@ -19,11 +19,12 @@ from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_PREFIX}/auth/login")
 
 
 class PaginationParams:
@@ -32,7 +33,12 @@ class PaginationParams:
     def __init__(
         self,
         page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
-        page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
+        page_size: int = Query(
+            default=settings.DEFAULT_PAGE_SIZE,
+            ge=1,
+            le=settings.MAX_PAGE_SIZE,
+            description="Items per page",
+        ),
     ):
         self.page = page
         self.page_size = page_size

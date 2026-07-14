@@ -1,11 +1,9 @@
 import axios from 'axios';
-
-// Resolve Backend base API URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+import { appConfig } from './appConfig';
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000, // 10 seconds timeout to prevent hanging connections
+  baseURL: appConfig.API_BASE_URL,
+  timeout: appConfig.API_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },

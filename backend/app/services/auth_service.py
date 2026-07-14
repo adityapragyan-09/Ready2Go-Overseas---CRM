@@ -59,15 +59,44 @@ def record_login(
     """
     Create a new ActivityLog row capturing the login event.
     """
+    now_utc = datetime.now(timezone.utc)
     log = ActivityLog(
         user_id=user_id,
         ip_address=ip_address,
         browser=browser,
         device=device,
+        login_time=now_utc,
     )
     db.add(log)
+    
+    # Automatically update user.last_login
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user.last_login = now_utc
+        
     db.commit()
     db.refresh(log)
+
+    # Notification trigger: Login event
+    try:
+        from app.services.notification_service import create_notification
+        user_obj = db.query(User).filter(User.id == user_id).first()
+        user_name = user_obj.name if user_obj else f"User #{user_id}"
+        create_notification(
+            db,
+            title="Employee Login",
+            message=f"{user_name} logged into the CRM portal.",
+            type="info",
+            module="authentication",
+            priority="low",
+            recipient_user_id=user_id,
+            created_by=user_id,
+            reference_type="user",
+            reference_id=user_id,
+        )
+    except Exception:
+        pass  # Non-critical — never block auth flow
+
     return log
 
 
@@ -86,8 +115,36 @@ def record_logout(db: Session, user_id: int) -> bool:
     if log is None:
         return False
 
-    log.logout_time = datetime.now(timezone.utc)
+    now_utc = datetime.now(timezone.utc)
+    log.logout_time = now_utc
+    
+    # Automatically update user.last_logout
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user.last_logout = now_utc
+        
     db.commit()
+
+    # Notification trigger: Logout event
+    try:
+        from app.services.notification_service import create_notification
+        user_obj = db.query(User).filter(User.id == user_id).first()
+        user_name = user_obj.name if user_obj else f"User #{user_id}"
+        create_notification(
+            db,
+            title="Employee Logout",
+            message=f"{user_name} logged out of the CRM portal.",
+            type="info",
+            module="authentication",
+            priority="low",
+            recipient_user_id=user_id,
+            created_by=user_id,
+            reference_type="user",
+            reference_id=user_id,
+        )
+    except Exception:
+        pass
+
     return True
 
 

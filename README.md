@@ -289,3 +289,59 @@ For a two-member team, a lean and clean workflow keeps speed high while maintain
    - Connect uploading API handlers and design the `ChatBox` and `DocumentUploader` wrappers.
 5. **Phase 5: Dashboards & Logging**
    - Add metrics compilation on the backend and implement activity logging. Design the admin panels and dashboard KPIs on the frontend.
+
+---
+
+## 6. Configuration Guide
+
+Ready2Go CRM is fully configuration-driven. Centralized settings are managed through environment variables in the backend and frontend.
+
+### 6.1 Backend Configuration Variables
+
+The backend uses Pydantic Settings to load settings from `.env`. If required variables are missing, the application fails fast.
+
+| Variable | Purpose | Default Value | Required | Example |
+|---|---|---|---|---|
+| `ENVIRONMENT` | Deployment environment context | `development` | No | `production` |
+| `DEBUG` | Enable Flask/FastAPI debugging features | `true` | No | `false` |
+| `APP_NAME` | Global application name | `Ready2Go CRM` | No | `Ready2Go CRM` |
+| `APP_VERSION` | Semantic application version | `1.0.0` | No | `1.0.0` |
+| `API_PREFIX` | Prefix for API router path mappings | `/api/v1` | No | `/api/v1` |
+| `COMPANY_NAME` | Branding company name | `Ready2Go Overseas` | No | `Ready2Go Overseas` |
+| `DATE_FORMAT` | Date serialization/parsing layout | `%Y-%m-%d` | No | `%Y-%m-%d` |
+| `DATETIME_FORMAT` | Date-time serialization/parsing layout | `%Y-%m-%d %H:%M:%S` | No | `%Y-%m-%d %H:%M:%S` |
+| `ENABLE_SOFT_DELETE` | Feature flag to enable soft deletes | `true` | No | `false` |
+| `SECRET_KEY` | Cryptographic secret for signing sessions | `change_me...` | YES | `4fae859cb82110c73bd95d...` |
+| `JWT_SECRET_KEY` | Secret key for signing JWT tokens | None | YES | `e8354c0cfb47120db82b7cf...` |
+| `JWT_ALGORITHM` | Hashing algorithm for JWT tokens | `HS256` | No | `HS256` |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Expiration time for JWT access tokens | `60` | No | `120` |
+| `DATABASE_URL` | Supabase PostgreSQL connection string | None | YES | `postgresql://postgres...:6543/postgres` |
+| `DATABASE_POOL_SIZE` | Database connection pool size limit | `5` | No | `10` |
+| `DATABASE_MAX_OVERFLOW` | Allowed database connection overflow | `10` | No | `20` |
+| `FRONTEND_URL` | Allowed CORS request origin | `http://localhost:5173` | No | `https://ready2go.vercel.app` |
+| `SUPABASE_URL` | REST endpoint for Supabase Project | None | YES | `https://xqtmtrgxsljyqbqqnljx.supabase.co` |
+| `SUPABASE_KEY` | API key/service token for Supabase Storage | None | YES | `eyJhbGciOiJIUzI1NiIsInR5c...` |
+| `SUPABASE_BUCKET` | Dedicated storage bucket name | `ready2go-documents` | No | `ready2go-documents` |
+| `UPLOAD_DIR` | Local disk spool folder for uploads | `uploads` | No | `uploads` |
+| `MAX_UPLOAD_SIZE_MB` | Maximum allowed file upload size in MB | `500` | No | `500` |
+| `UPLOAD_TIMEOUT_SECONDS` | Timeout limit for large file transfers | `600` | No | `600` |
+| `SIGNED_URL_EXPIRY_MINUTES` | Secure download signed token lifespan | `60` | No | `60` |
+| `ALLOWED_DOCUMENT_TYPES` | Comma-separated list of allowed extensions | `pdf,jpg,jpeg,png,doc,docx` | No | `pdf,jpg,png` |
+| `DEFAULT_PAGE_SIZE` | Default number of records on paginated list queries | `10` | No | `20` |
+| `MAX_PAGE_SIZE` | Cap for paginated requests to prevent DB overload | `100` | No | `100` |
+| `MAX_SEARCH_RESULTS` | Maximum row retrieval limit for search filters | `100` | No | `150` |
+
+### 6.2 Frontend Configuration Variables (Vite)
+
+The React client loads environment variables at build time using Vite's configuration loaders.
+
+| Variable | Purpose | Default Value | Required | Example |
+|---|---|---|---|---|
+| `VITE_APP_NAME` | Suffix for page HTML titles and UI branding banners | `Ready2Go CRM` | No | `Ready2Go CRM` |
+| `VITE_API_URL` | Backend URL endpoint gateway path | `http://localhost:8000/api/v1` | YES | `https://api.ready2go.com/api/v1` |
+| `VITE_API_BASE_URL` | Alias base URL for Axios client routing | `http://localhost:8000/api/v1` | YES | `https://api.ready2go.com/api/v1` |
+| `VITE_MAX_UPLOAD_SIZE_MB` | Client-side validation size rejection threshold | `500` | No | `500` |
+| `VITE_ALLOWED_DOCUMENT_TYPES` | Comma-separated extensions allowed in upload drop zone | `pdf,jpg,jpeg,png,doc,docx` | No | `pdf,jpg,png` |
+| `VITE_API_TIMEOUT_MS` | Timeout threshold for Axios client uploads (ms) | `600000` | No | `600000` |
+| `VITE_DEFAULT_PAGE_SIZE` | Initial items count for paginated lists | `10` | No | `10` |
+

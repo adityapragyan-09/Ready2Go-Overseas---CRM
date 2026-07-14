@@ -2,10 +2,12 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import Login from './pages/Auth/Login';
 import EmployeeManagement from './pages/Employees/EmployeeManagement';
+import ApplicantsPage from './pages/Applicants/ApplicantsPage';
 
 // Reusable components
 import Card from './components/Card';
@@ -49,22 +51,6 @@ const DashboardPlaceholder = () => {
   );
 };
 
-const ApplicantsPlaceholder = () => {
-  useDocumentTitle('Applicants Queue');
-  return (
-    <div className="space-y-6">
-      <PageHeader 
-        title="Applicant Management" 
-        subtitle="Consolidated record list for all visa types"
-        breadcrumbs={[{ label: 'Home', path: '/dashboard' }, { label: 'Applicants' }]}
-      />
-      <Card title="Applicant Records Queue">
-        <p className="text-sm text-slate-500">This module is reserved for the consolidated visa applicant CRUD list view.</p>
-      </Card>
-    </div>
-  );
-};
-
 const LogsPlaceholder = () => {
   useDocumentTitle('System Activity Logs');
   return (
@@ -85,6 +71,7 @@ function App() {
   return (
     <Router>
       <AuthProvider>
+        <NotificationProvider>
         {/* Toast notifications rendering container */}
         <Toaster 
           position="top-right"
@@ -110,7 +97,7 @@ function App() {
           {/* Protected Area wrapping DashboardLayout */}
           <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<DashboardPlaceholder />} />
-            <Route path="/applicants" element={<ApplicantsPlaceholder />} />
+            <Route path="/applicants" element={<ApplicantsPage />} />
             <Route path="/employees" element={<EmployeeManagement />} />
             <Route path="/activity-logs" element={<LogsPlaceholder />} />
           </Route>
@@ -123,6 +110,7 @@ function App() {
           {/* Catch-all Routing */}
           <Route path="*" element={<Navigate to="/404" replace />} />
         </Routes>
+        </NotificationProvider>
       </AuthProvider>
     </Router>
   );

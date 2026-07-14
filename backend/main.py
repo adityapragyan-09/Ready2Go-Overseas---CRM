@@ -17,8 +17,13 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.api.applicants import router as applicants_router
 from app.api.auth import router as auth_router
 from app.api.employees import router as employees_router
+from app.api.documents import router as documents_router
+from app.api.progress import router as progress_router
+from app.api.chat import router as chat_router
+from app.api.notifications import router as notifications_router
 from app.core.config import settings
 from app.middlewares.cors import setup_cors
 from app.utils.response import error_response
@@ -42,17 +47,13 @@ Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 # ── Register API routers ────────────────────────
 
-app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
-app.include_router(employees_router, prefix="/api/v1/employees", tags=["Employees"])
-
-# Future routers (uncomment as modules are built):
-# app.include_router(applicants_router,    prefix="/api/v1/applicants",    tags=["Applicants"])
-# app.include_router(documents_router,     prefix="/api/v1/documents",     tags=["Documents"])
-# app.include_router(employees_router,     prefix="/api/v1/employees",     tags=["Employees"])
-# app.include_router(messages_router,      prefix="/api/v1/messages",      tags=["Messages"])
-# app.include_router(dashboard_router,     prefix="/api/v1/dashboard",     tags=["Dashboard"])
-# app.include_router(activity_logs_router, prefix="/api/v1/activity-logs", tags=["Activity Logs"])
-# app.include_router(progress_router,      prefix="/api/v1/progress",      tags=["Progress"])
+app.include_router(auth_router, prefix=f"{settings.API_PREFIX}/auth", tags=["Auth"])
+app.include_router(employees_router, prefix=f"{settings.API_PREFIX}/employees", tags=["Employees"])
+app.include_router(applicants_router, prefix=f"{settings.API_PREFIX}/applicants", tags=["Applicants"])
+app.include_router(documents_router, prefix=f"{settings.API_PREFIX}/documents", tags=["Documents"])
+app.include_router(progress_router, prefix=f"{settings.API_PREFIX}/progress", tags=["Progress"])
+app.include_router(chat_router, prefix=f"{settings.API_PREFIX}/chat", tags=["Chat"])
+app.include_router(notifications_router, prefix=f"{settings.API_PREFIX}/notifications", tags=["Notifications"])
 
 
 # ── Health check ─────────────────────────────────

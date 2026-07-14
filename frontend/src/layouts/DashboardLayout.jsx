@@ -18,6 +18,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import NotificationBell from '../components/NotificationBell';
 
 const DashboardLayout = () => {
   const { user, logout } = useAuth();
@@ -193,8 +194,10 @@ const DashboardLayout = () => {
             ))}
           </div>
 
-          {/* User Profile dropdown menu */}
-          <div className="relative" ref={dropdownRef}>
+          {/* Notification Bell + User Profile dropdown menu */}
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}
               className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors"
@@ -222,6 +225,7 @@ const DashboardLayout = () => {
                 </button>
               </div>
             )}
+          </div>
           </div>
         </header>
 

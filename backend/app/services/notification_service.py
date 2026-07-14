@@ -1,0 +1,216 @@
+"""
+Ready2Go CRM — Notification Service
+
+Handles creation, retrieval, read flags, and retention pruning of notifications.
+"""
+
+from datetime import datetime, timezone, timedelta
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
+
+from app.core.config import settings
+from app.models.notification import Notification
+from app.models.user import User
+
+
+def generate_next_notification_code(db: Session) -> str:
+    """Generate sequential notification code e.g. NOT-000001, NOT-000002."""
+    last_notif = (
+        db.query(Notification)
+        .order_by(Notification.id.desc())
+        .first()
+    )
+    if not last_notif:
+        return "NOT-000001"
+    
+    try:
+        code_part = last_notif.notification_code.replace("NOT-", "")
+        next_num = int(code_part) + 1
+        return f"NOT-{next_num:06d}"
+    except (ValueError, TypeError):
+        return "NOT-000001"
+
+
+def create_notification(
+    db: Session,
+    title: str,
+    message: str,
+    type: str = "info",
+    module: str = "system",
+    priority: str = "medium",
+    recipient_user_id: int | None = None,
+    created_by: int | None = None,
+    reference_type: str | None = None,
+    reference_id: int | None = None,
+) -> Notification:
+    """Create a new notification entry, auto-generating sequential code."""
+    code = generate_next_notification_code(db)
+
+    notification = Notification(
+        notification_code=code,
+        title=title,
+        message=message,
+        type=type,
+        module=module,
+        priority=priority,
+        recipient_user_id=recipient_user_id,
+        created_by=created_by,
+        reference_type=reference_type,
+        reference_id=reference_id,
+        is_read=False,
+    )
+
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+def get_latest_notifications(
+    db: Session,
+    user_id: int,
+    is_admin: bool,
+    page: int = 1,
+    page_size: int | None = None,
+) -> tuple[int, list[Notification]]:
+    """
+    Retrieve paginated notifications ordered by created_at DESC.
+    Admins: see own targeted OR system-wide/system module notifications.
+    Employees: see own targeted notifications only.
+    """
+    if is_admin:
+        filter_cond = or_(
+            Notification.recipient_user_id == user_id,
+            Notification.recipient_user_id.is_(None)
+        )
+    else:
+        filter_cond = Notification.recipient_user_id == user_id
+
+    query = db.query(Notification).filter(filter_cond)
+    total = query.count()
+
+    limit = page_size or settings.DEFAULT_PAGE_SIZE
+    offset = (page - 1) * limit
+
+    items = (
+        query.order_by(Notification.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return total, items
+
+
+def get_unread_count(db: Session, user_id: int, is_admin: bool) -> int:
+    """Return count of unread notifications matching the user's privilege view filter."""
+    if is_admin:
+        filter_cond = or_(
+            Notification.recipient_user_id == user_id,
+            Notification.recipient_user_id.is_(None)
+        )
+    else:
+        filter_cond = Notification.recipient_user_id == user_id
+
+    return (
+        db.query(Notification)
+        .filter(and_(filter_cond, Notification.is_read == False))
+        .count()
+    )
+
+
+def mark_read(db: Session, notification_id: int, user_id: int, is_admin: bool) -> Notification:
+    """Mark a specific notification as read if user is authorized."""
+    notif = db.query(Notification).filter(Notification.id == notification_id).first()
+    if not notif:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found."
+        )
+
+    # Authorization Check
+    # Employees can only mark their own notifications as read.
+    # Admins can read system-wide notifications too.
+    if notif.recipient_user_id is not None and notif.recipient_user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to modify this notification."
+        )
+    if notif.recipient_user_id is None and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to administrators."
+        )
+
+    if not notif.is_read:
+        notif.is_read = True
+        notif.read_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(notif)
+
+    return notif
+
+
+def mark_all_read(db: Session, user_id: int, is_admin: bool) -> int:
+    """Mark all unread notifications visible to the user as read."""
+    if is_admin:
+        filter_cond = or_(
+            Notification.recipient_user_id == user_id,
+            Notification.recipient_user_id.is_(None)
+        )
+    else:
+        filter_cond = Notification.recipient_user_id == user_id
+
+    unread_notifs = (
+        db.query(Notification)
+        .filter(and_(filter_cond, Notification.is_read == False))
+        .all()
+    )
+
+    now_utc = datetime.now(timezone.utc)
+    for notif in unread_notifs:
+        notif.is_read = True
+        notif.read_at = now_utc
+
+    db.commit()
+    return len(unread_notifs)
+
+
+def delete_notification(db: Session, notification_id: int, user_id: int, is_admin: bool) -> Notification:
+    """Delete (remove) a specific notification from the database."""
+    notif = db.query(Notification).filter(Notification.id == notification_id).first()
+    if not notif:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found."
+        )
+
+    # Authorization Check
+    if notif.recipient_user_id is not None and notif.recipient_user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to delete this notification."
+        )
+    if notif.recipient_user_id is None and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to administrators."
+        )
+
+    db.delete(notif)
+    db.commit()
+    return notif
+
+
+def delete_old_notifications(db: Session, days_limit: int = 30) -> int:
+    """Prune/delete read notifications older than the threshold limit (e.g. 30 days)."""
+    threshold_date = datetime.now(timezone.utc) - timedelta(days=days_limit)
+    
+    deleted_count = (
+        db.query(Notification)
+        .filter(and_(Notification.is_read == True, Notification.created_at < threshold_date))
+        .delete()
+    )
+    db.commit()
+    return deleted_count
