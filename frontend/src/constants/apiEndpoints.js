@@ -1,22 +1,17 @@
 /**
  * Ready2Go CRM — API Endpoint Constants
  *
- * Defines all backend endpoint relative paths.
- * Import these whenever making API calls.
+ * Defines all backend endpoint relative paths used across services.
+ * Services import these to ensure API path consistency.
+ *
+ * All paths are relative — the axios baseURL (VITE_API_BASE_URL)
+ * prefixes them automatically.
  */
 
 export const API_ENDPOINTS = {
-  AUTH: {
-    LOGIN: '/auth/login',
-    LOGOUT: '/auth/logout',
-    ME: '/auth/me',
-  },
   APPLICANTS: {
     BASE: '/applicants',
     DETAIL: (id) => `/applicants/${id}`,
-    DOCUMENTS: (id) => `/applicants/${id}/documents`,
-    MESSAGES: (id) => `/applicants/${id}/messages`,
-    PROGRESS: (id) => `/applicants/${id}/progress`,
   },
   DOCUMENTS: {
     UPLOAD: '/documents/upload',
@@ -36,16 +31,6 @@ export const API_ENDPOINTS = {
     CREATE: (applicantId) => `/chat/applicant/${applicantId}`,
     DELETE: (messageId) => `/chat/${messageId}`,
     LATEST: (applicantId) => `/chat/latest/${applicantId}`,
-  },
-  EMPLOYEES: {
-    BASE: '/employees',
-    DETAIL: (id) => `/employees/${id}`,
-  },
-  DASHBOARD: {
-    STATS: '/dashboard/stats',
-  },
-  ACTIVITY_LOGS: {
-    BASE: '/activity-logs',
   },
 };
 
