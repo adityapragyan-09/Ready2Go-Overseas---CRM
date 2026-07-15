@@ -338,8 +338,8 @@ The React client loads environment variables at build time using Vite's configur
 | Variable | Purpose | Default Value | Required | Example |
 |---|---|---|---|---|
 | `VITE_APP_NAME` | Suffix for page HTML titles and UI branding banners | `Ready2Go CRM` | No | `Ready2Go CRM` |
-| `VITE_API_URL` | Backend URL endpoint gateway path | `http://localhost:8000/api/v1` | YES | `https://api.ready2go.com/api/v1` |
-| `VITE_API_BASE_URL` | Alias base URL for Axios client routing | `http://localhost:8000/api/v1` | YES | `https://api.ready2go.com/api/v1` |
+| `VITE_API_URL` | Backend URL endpoint gateway path | `http://localhost:8000/api/v1` | YES | `https://your-backend-url.com/api/v1` |
+| `VITE_API_BASE_URL` | Alias base URL for Axios client routing | `http://localhost:8000/api/v1` | YES | `https://your-backend-url.com/api/v1` |
 | `VITE_MAX_UPLOAD_SIZE_MB` | Client-side validation size rejection threshold | `500` | No | `500` |
 | `VITE_ALLOWED_DOCUMENT_TYPES` | Comma-separated extensions allowed in upload drop zone | `pdf,jpg,jpeg,png,doc,docx` | No | `pdf,jpg,png` |
 | `VITE_API_TIMEOUT_MS` | Timeout threshold for Axios client uploads (ms) | `600000` | No | `600000` |
