@@ -74,7 +74,11 @@ def decode_access_token(token: str) -> dict | None:
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"require": ["sub", "exp", "type"]},
+            audience=settings.APP_NAME,
+            issuer=settings.APP_NAME,
+            options={
+                "require": ["sub", "exp", "type"]
+            },
         )
 
         if payload.get("type") != "access":
