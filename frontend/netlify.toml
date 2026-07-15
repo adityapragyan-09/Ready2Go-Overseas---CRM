@@ -1,0 +1,21 @@
+# ═══════════════════════════════════════════════════
+# Ready2Go CRM — Netlify Deployment Configuration
+# ═══════════════════════════════════════════════════
+#
+# Build settings for the frontend SPA.
+# Set VITE_API_BASE_URL in Netlify Dashboard → Environment Variables.
+# ═══════════════════════════════════════════════════
+
+[build]
+  base    = "frontend"
+  publish = "frontend/dist"
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA routing: all routes fall back to index.html
+[[redirects]]
+  from = "/*"
+  to   = "/index.html"
+  status = 200
