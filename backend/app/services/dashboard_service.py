@@ -5,7 +5,7 @@ Ready2Go CRM — Dashboard & Analytics Service
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List
-from sqlalchemy import func, or_, and_
+from sqlalchemy import extract, func, or_, and_
 from sqlalchemy.orm import Session
 
 from app.models.applicant import Applicant
@@ -135,7 +135,7 @@ def get_charts(db: Session, current_user: User) -> Dict[str, Any]:
     
     monthly_raw = (
         db.query(
-            func.strftime("%m", Applicant.created_at).label("month"),
+            extract("month", Applicant.created_at).label("month"),
             func.count(Applicant.id)
         )
         .filter(and_(app_cond, Applicant.created_at >= year_start))
@@ -144,21 +144,22 @@ def get_charts(db: Session, current_user: User) -> Dict[str, Any]:
     )
     
     months_names = {
-        "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr", "05": "May", "06": "Jun",
-        "07": "Jul", "08": "Aug", "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec"
+        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
     }
-    
+
     monthly_map = {m: 0 for m in months_names.values()}
-    for m in monthly_raw:
-        m_name = months_names.get(m[0])
+    for row in monthly_raw:
+        month_num = int(row[0]) if row[0] is not None else 0
+        m_name = months_names.get(month_num)
         if m_name:
-            monthly_map[m_name] = m[1]
+            monthly_map[m_name] = row[1]
     monthly_registrations = [{"label": k, "value": v} for k, v in monthly_map.items()]
 
     # Yearly registrations
     yearly_raw = (
         db.query(
-            func.strftime("%Y", Applicant.created_at).label("year"),
+            extract("year", Applicant.created_at).label("year"),
             func.count(Applicant.id)
         )
         .filter(app_cond)
