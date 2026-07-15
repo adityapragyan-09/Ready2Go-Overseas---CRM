@@ -100,6 +100,10 @@ if settings.ENVIRONMENT.lower() == "production":
         raise RuntimeError("FRONTEND_URL must be configured for CORS in production")
     if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
         raise RuntimeError("Supabase credentials (SUPABASE_URL, SUPABASE_KEY) must be provided in production")
+    if not settings.SUPABASE_URL.startswith("https://"):
+        raise RuntimeError("SUPABASE_URL must be a valid HTTPS URL")
+    if not settings.SUPABASE_KEY.startswith("ey"):
+        raise RuntimeError("SUPABASE_KEY appears invalid — should be a JWT token starting with 'ey'")
     if settings.DATABASE_URL.startswith("sqlite"):
         raise RuntimeError("SQLite is not supported in production. Use a PostgreSQL-compatible database URL.")
 

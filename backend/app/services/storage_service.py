@@ -5,12 +5,15 @@ Handles raw HTTP communications with Supabase Storage API for uploading,
 deleting, and signing download links for applicant documents.
 """
 
+import logging
 import os
 from pathlib import Path
 
 import requests
 from fastapi import HTTPException, status
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _get_headers(mime_type: str = None) -> dict:
@@ -60,15 +63,29 @@ def upload_file(file_data, storage_path: str, mime_type: str) -> str:
     try:
         response = requests.post(url, data=file_data, headers=headers, timeout=settings.UPLOAD_TIMEOUT_SECONDS)
         if response.status_code != 200:
+            logger.error(
+                "Supabase upload failed [status=%s url=%s bucket=%s path=%s] response=%s",
+                response.status_code,
+                settings.SUPABASE_URL,
+                settings.SUPABASE_BUCKET,
+                storage_path,
+                response.text,
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Storage authentication failed. Check SUPABASE_URL and SUPABASE_KEY configuration.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Supabase Storage upload failed: {response.text}",
+                detail="File upload to storage failed. Please try again later.",
             )
         return f"{settings.SUPABASE_URL}/storage/v1/object/public/{settings.SUPABASE_BUCKET}/{storage_path}"
     except requests.RequestException as e:
+        logger.exception("Storage upload network error for path %s", storage_path)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Storage service request error: {str(e)}",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Storage service is currently unavailable. Please try again later.",
         )
 
 
@@ -91,14 +108,26 @@ def delete_file(storage_path: str) -> None:
     try:
         response = requests.delete(url, json={"prefixes": [storage_path]}, headers=headers, timeout=60)
         if response.status_code not in (200, 204):
+            logger.error(
+                "Supabase delete failed [status=%s path=%s] response=%s",
+                response.status_code,
+                storage_path,
+                response.text,
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Storage authentication failed. Check SUPABASE_URL and SUPABASE_KEY configuration.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Supabase Storage deletion failed: {response.text}",
+                detail="File deletion from storage failed.",
             )
     except requests.RequestException as e:
+        logger.exception("Storage delete network error for path %s", storage_path)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Storage service request error: {str(e)}",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Storage service is currently unavailable.",
         )
 
 
@@ -119,16 +148,28 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     try:
         response = requests.post(url, json={"expiresIn": expires_in}, headers=headers, timeout=60)
         if response.status_code != 200:
+            logger.error(
+                "Supabase signed URL failed [status=%s path=%s] response=%s",
+                response.status_code,
+                storage_path,
+                response.text,
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Storage authentication failed. Check SUPABASE_URL and SUPABASE_KEY configuration.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Supabase Storage url signature failed: {response.text}",
+                detail="Failed to generate document access URL.",
             )
         data = response.json()
         signed_url = data.get("signedURL") or data.get("signedUrl")
         if not signed_url:
+            logger.error("Supabase signed URL response missing signedURL field: %s", data)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Signed URL missing in Supabase response.",
+                detail="Storage service returned an unexpected response.",
             )
 
         if signed_url.startswith("/"):
@@ -136,7 +177,8 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
 
         return signed_url
     except requests.RequestException as e:
+        logger.exception("Storage signed URL network error for path %s", storage_path)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Storage service request error: {str(e)}",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Storage service is currently unavailable.",
         )
