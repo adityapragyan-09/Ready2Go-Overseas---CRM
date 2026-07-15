@@ -29,7 +29,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plaintext password against a bcrypt hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
-
 # ── JWT Tokens ───────────────────────────────────
 
 def create_access_token(
@@ -65,18 +64,11 @@ def create_access_token(
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 def decode_access_token(token: str) -> dict | None:
-    """
-    Decode and validate a JWT access token.
-
-    Validates:
-        - Signature integrity
-        - Expiration time
-        - Token type ('access')
-
-    Returns:
-        The decoded payload dict, or None if the token is invalid/expired.
-    """
     try:
         payload = jwt.decode(
             token,
@@ -84,10 +76,12 @@ def decode_access_token(token: str) -> dict | None:
             algorithms=[settings.JWT_ALGORITHM],
             options={"require": ["sub", "exp", "type"]},
         )
+
         if payload.get("type") != "access":
             return None
+
         return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
+
+    except Exception as e:
+        logger.exception(f"JWT decode failed: {e}")
         return None
