@@ -174,8 +174,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTPExceptions with standard envelope."""
+    """Handle HTTPExceptions with standard envelope and appropriate error codes."""
     request_id = getattr(request.state, "request_id", None)
+
+    # Map HTTP status codes to machine-readable error codes
+    error_code_map = {
+        status.HTTP_400_BAD_REQUEST: "BAD_REQUEST",
+        status.HTTP_401_UNAUTHORIZED: "UNAUTHORIZED",
+        status.HTTP_403_FORBIDDEN: "FORBIDDEN",
+        status.HTTP_404_NOT_FOUND: "NOT_FOUND",
+        status.HTTP_409_CONFLICT: "CONFLICT",
+        status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
+        status.HTTP_429_TOO_MANY_REQUESTS: "RATE_LIMITED",
+    }
+    error_code = error_code_map.get(exc.status_code, "HTTP_ERROR")
 
     logger.warning(
         f"HTTP {exc.status_code}: {exc.detail}",
@@ -188,7 +200,11 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response(exc.detail, request_id=request_id),
+        content=error_response(
+            exc.detail,
+            request_id=request_id,
+            error=error_code,
+        ),
     )
 
 
