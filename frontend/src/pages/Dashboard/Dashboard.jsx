@@ -584,9 +584,9 @@ export const Dashboard = () => {
                 <Database className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">SQLite Database</p>
-                <p className="text-sm font-extrabold text-slate-800 mt-0.5">Online (v{system.sqlite_version})</p>
-                <p className="text-[10px] text-slate-400">File size: {(system.total_db_size_bytes / 1024).toFixed(1)} KB</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Database Engine</p>
+                <p className="text-sm font-extrabold text-slate-800 mt-0.5 capitalize">{system.db_backend}</p>
+                <p className="text-[10px] text-slate-400">Database backend provider</p>
               </div>
             </div>
 
@@ -619,7 +619,7 @@ export const Dashboard = () => {
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">System Uptime</p>
                 <p className="text-sm font-extrabold text-slate-800 mt-0.5">{(system.system_uptime_seconds / 60).toFixed(0)} mins</p>
-                <p className="text-[10px] text-slate-400">Total record entries: {system.total_queries_logged}</p>
+                <p className="text-[10px] text-slate-400">Total record entries: {system.total_records}</p>
               </div>
             </div>
           </div>

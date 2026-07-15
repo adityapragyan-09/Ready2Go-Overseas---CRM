@@ -162,8 +162,7 @@ class DashboardEmployeeResponse(BaseModel):
 
 
 class DashboardSystemResponse(BaseModel):
-    total_db_size_bytes: int
-    sqlite_version: str
+    db_backend: str
     system_uptime_seconds: Optional[float] = None
     active_user_sessions: int
-    total_queries_logged: int
+    total_records: int

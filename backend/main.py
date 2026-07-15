@@ -109,29 +109,22 @@ def readiness_check():
 
     try:
         db = SessionLocal()
-
-        # Standard SQLAlchemy database connectivity check
         db.execute(text("SELECT 1"))
-
         return {
             "status": "ready",
             "database": "connected",
         }
-
-    except Exception as exc:
+    except Exception:
         logger.exception("Readiness check failed")
-
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
                 "status": "not ready",
                 "database": "disconnected",
-                "error": str(exc),   # Remove this after debugging
             },
         )
-
     finally:
-        if db:
+        if db is not None:
             db.close()
 
 

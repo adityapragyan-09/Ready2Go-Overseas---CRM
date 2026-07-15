@@ -2,9 +2,7 @@
 Ready2Go CRM — Dashboard & Analytics Service
 """
 
-import os
 import time
-import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List
 from sqlalchemy import func, or_, and_
@@ -577,22 +575,14 @@ def get_employees(db: Session, current_user: User) -> List[Dict[str, Any]]:
 
 def get_system(db: Session, current_user: User) -> Dict[str, Any]:
     """
-    Returns SQLite database performance parameters and overview.
+    Returns database performance parameters and overview.
     Strictly admin-only.
+    Database-agnostic — compatible with PostgreSQL and SQLite.
     """
-    # 1. SQLite Database file size
-    db_size = 0
-    db_path = "crm.db"
-    if os.path.exists(db_path):
-        db_size = os.path.getsize(db_path)
-
-    # 2. SQLite version
-    sqlite_version = sqlite3.sqlite_version
-
-    # 3. System Uptime (seconds)
+    # 1. System Uptime (seconds)
     uptime_seconds = time.time() - _START_TIME
 
-    # 4. Active user sessions (distinct active user logins in last 24h)
+    # 2. Active user sessions (distinct active user logins in last 24h)
     active_sessions_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
     active_sessions = (
         db.query(func.count(func.distinct(ActivityLog.user_id)))
@@ -600,23 +590,25 @@ def get_system(db: Session, current_user: User) -> Dict[str, Any]:
         .scalar() or 0
     )
 
-    # 5. Approx query workload size (Sum of records across primary transactional tables)
+    # 3. Total records across primary tables (database-agnostic)
     users_count = db.query(func.count(User.id)).scalar() or 0
     applicants_count = db.query(func.count(Applicant.id)).scalar() or 0
     docs_count = db.query(func.count(Document.id)).scalar() or 0
     messages_count = db.query(func.count(Message.id)).scalar() or 0
     progress_count = db.query(func.count(ProgressHistory.id)).scalar() or 0
     notifs_count = db.query(func.count(Notification.id)).scalar() or 0
-    
+
     total_queries_logged = (
-        users_count + applicants_count + docs_count + 
+        users_count + applicants_count + docs_count +
         messages_count + progress_count + notifs_count
     )
 
+    # 4. Database backend type
+    db_backend = "postgresql" if "postgresql" in str(db.bind.url) else "sqlite"
+
     return {
-        "total_db_size_bytes": db_size,
-        "sqlite_version": sqlite_version,
+        "db_backend": db_backend,
         "system_uptime_seconds": uptime_seconds,
         "active_user_sessions": active_sessions,
-        "total_queries_logged": total_queries_logged,
+        "total_records": total_queries_logged,
     }
