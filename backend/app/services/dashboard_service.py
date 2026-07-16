@@ -55,6 +55,7 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
 
     # Derived values
     total_employees = db.query(func.count(User.id)).scalar() or 0
+    inactive_employees = total_employees - active_employees
 
     completed_statuses = ["completed", "approved", "visa_approved", "visa_issued"]
     completed_applications = sum(status_counts.get(status, 0) for status in completed_statuses)
