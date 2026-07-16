@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 # ── Password Hashing ────────────────────────────
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt with 10 rounds balances security and performance.
+# OWASP recommends minimum 10 rounds for production.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=10)
 
 
 def hash_password(password: str) -> str:

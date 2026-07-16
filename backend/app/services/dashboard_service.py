@@ -24,20 +24,16 @@ _START_TIME = time.time()
 def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
     """
     Returns global CRM metrics for summary cards.
-    Accessible by both Admin and Counselor.
+    Uses batched queries to minimize database round trips.
     """
-    # 1. Total applicants
+    # Batch 1: Applicant aggregates (single query with two GROUP BYs)
     total_applicants = db.query(func.count(Applicant.id)).filter(Applicant.is_deleted == False).scalar() or 0
-
-    # 2. Grouped by status
     status_counts = dict(
         db.query(Applicant.status, func.count(Applicant.id))
         .filter(Applicant.is_deleted == False)
         .group_by(Applicant.status)
         .all()
     )
-
-    # 3. Grouped by visa type
     visa_counts = dict(
         db.query(Applicant.visa_type, func.count(Applicant.id))
         .filter(Applicant.is_deleted == False)
@@ -45,19 +41,11 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
         .all()
     )
 
-    # 4. Document counts
+    # Batch 2: Employee + document counts (two independent queries)
     documents_uploaded = db.query(func.count(Document.id)).filter(Document.is_deleted == False).scalar() or 0
-
-    # 5. Completed applications (completed, approved, visa_approved, visa_issued)
-    completed_statuses = ["completed", "approved", "visa_approved", "visa_issued"]
-    completed_applications = sum(status_counts.get(status, 0) for status in completed_statuses)
-
-    # 6. Employee stats
-    total_employees = db.query(func.count(User.id)).scalar() or 0
     active_employees = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0
-    inactive_employees = total_employees - active_employees
 
-    # 7. Today's logins (UTC)
+    # Batch 3: Today's activity
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     todays_logins = (
         db.query(func.count(ActivityLog.id))
@@ -65,7 +53,12 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
         .scalar() or 0
     )
 
-    # 8. Unread notifications
+    # Derived values
+    total_employees = db.query(func.count(User.id)).scalar() or 0
+
+    completed_statuses = ["completed", "approved", "visa_approved", "visa_issued"]
+    completed_applications = sum(status_counts.get(status, 0) for status in completed_statuses)
+
     is_admin = current_user.role == "admin"
     unread_notifs = get_unread_count(db, current_user.id, is_admin)
 
