@@ -18,7 +18,6 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import text
 
 from app.api.applicants import router as applicants_router
@@ -82,8 +81,6 @@ app.include_router(chat_router, prefix=f"{settings.API_PREFIX}/chat", tags=["Cha
 app.include_router(notifications_router, prefix=f"{settings.API_PREFIX}/notifications", tags=["Notifications"])
 app.include_router(dashboard_router, prefix=f"{settings.API_PREFIX}/dashboard", tags=["Dashboard"])
 app.include_router(activity_logs_router, prefix=f"{settings.API_PREFIX}/activity-logs", tags=["Activity Logs"])
-
-# ── Health / Liveness / Readiness ────────────────
 
 # ── Health / Liveness / Readiness ────────────────
 

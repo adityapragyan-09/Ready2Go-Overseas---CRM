@@ -65,7 +65,7 @@ class User(Base):
         "Document", foreign_keys="[Document.deleted_by]",
         back_populates="deleter", lazy="dynamic",
     )
-    sent_messages = relationship("Message", back_populates="sender", lazy="dynamic", cascade="all, delete-orphan")
+    sent_messages = relationship("Message", back_populates="sender", lazy="dynamic")
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

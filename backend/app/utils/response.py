@@ -15,8 +15,6 @@ Envelope format:
 }
 """
 
-import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from app.schemas.response import APIResponse

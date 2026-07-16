@@ -78,9 +78,9 @@ class Applicant(Base):
     deleter = relationship(
         "User", foreign_keys=[deleted_by], back_populates="deleted_applicants",
     )
-    documents = relationship("Document", back_populates="applicant", cascade="all, delete-orphan")
-    messages = relationship("Message", back_populates="applicant", cascade="all, delete-orphan")
-    progress_history = relationship("ProgressHistory", back_populates="applicant", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="applicant")
+    messages = relationship("Message", back_populates="applicant")
+    progress_history = relationship("ProgressHistory", back_populates="applicant")
 
     @property
     def created_by_name(self) -> str:

@@ -8,10 +8,19 @@ from app.core.config import settings
 
 
 class SimpleRateLimiterMiddleware(BaseHTTPMiddleware):
-    """Very small in-memory IP rate limiter.
+    """In-memory IP-based rate limiter for single-process deployments.
 
-    Not suitable for multi-process production deployments behind a load
-    balancer — prefer a centralized store (Redis) or API gateway in real setups.
+    Limitations:
+        - In-memory only: not shared across multiple worker processes.
+          Each worker independently counts requests, effectively multiplying
+          the per-IP limit by worker count when using multiple gunicorn workers.
+        - State is lost on process restart.
+
+    Production recommendation:
+        For multi-worker or load-balanced deployments, replace with a
+        centralized store (Redis via `fastapi-limiter` or similar).
+
+    Current limit: {requests_per_minute} requests per minute per IP.
     """
 
     def __init__(self, app, requests_per_minute: int = 600):
@@ -21,8 +30,8 @@ class SimpleRateLimiterMiddleware(BaseHTTPMiddleware):
         self.store = defaultdict(deque)
 
     async def dispatch(self, request, call_next):
-        # Do not rate limit internal health checks or docs when in debug
-        if request.url.path in ("/health",) or settings.DEBUG:
+        # Do not rate limit internal health checks, probes, or docs when in debug
+        if request.url.path in ("/health", "/ready", "/live", "/version") or settings.DEBUG:
             return await call_next(request)
 
         client = request.client.host if request.client else "unknown"

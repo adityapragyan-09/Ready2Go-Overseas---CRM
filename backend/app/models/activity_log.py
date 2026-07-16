@@ -7,7 +7,7 @@ Used by admins to monitor employee activity within the CRM.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -31,6 +31,12 @@ class ActivityLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     browser: Mapped[str | None] = mapped_column(String(256), nullable=True)
     device: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    # ── Composite indexes for efficient querying ─────
+    __table_args__ = (
+        Index("ix_activity_logs_user_login", "user_id", "login_time"),
+        Index("ix_activity_logs_login_logout", "login_time", "logout_time"),
+    )
 
     # Relationships
     user = relationship("User", back_populates="activity_logs")
