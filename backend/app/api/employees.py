@@ -7,7 +7,7 @@ Access Level:
     - All other endpoints: Administrators only (require_admin dependency)
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_admin
@@ -23,6 +23,7 @@ from app.schemas.employee import (
     EmployeeUpdate,
 )
 from app.services import employee_service
+from app.services.auth_service import admin_reset_password, generate_secure_password
 from app.utils.response import success_response
 
 router = APIRouter()
@@ -194,16 +195,67 @@ def update_employee_status_route(
 def reset_employee_password_route(
     id: int,
     body: EmployeePasswordReset,
+    request: Request,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
     """
-    Reset employee account password.
+    Reset employee account password (sets must_change_password=true).
     Access restricted to administrators.
     """
-    updated_emp = employee_service.reset_employee_password(db, id, new_password=body.password)
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent")
+
+    updated_emp = admin_reset_password(
+        db,
+        target_user_id=id,
+        new_password=body.password,
+        action_by=admin.id,
+        ip_address=ip,
+        browser=ua,
+    )
     data = EmployeeOut.model_validate(updated_emp).model_dump(by_alias=True)
     return success_response(
-        message="Employee password reset successfully.",
+        message="Employee password reset successfully. Employee must change password on next login.",
+        data=data,
+    )
+
+
+# ── GET /{id}/generate-password ──────────────
+
+@router.get("/{id}/generate-password")
+def generate_password_route(
+    id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Generate a secure random temporary password (does NOT save it).
+    Access restricted to administrators.
+    """
+    password = generate_secure_password()
+    return success_response(
+        message="Secure temporary password generated.",
+        data={"temporary_password": password},
+    )
+
+
+# ── PATCH /{id}/unlock ───────────────────────
+
+@router.patch("/{id}/unlock")
+def unlock_account_route(
+    id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Unlock a locked employee account.
+    Access restricted to administrators.
+    """
+    from app.services.auth_service import unlock_account
+    updated_emp = unlock_account(db, target_user_id=id, action_by=admin.id)
+    data = EmployeeOut.model_validate(updated_emp).model_dump(by_alias=True)
+    return success_response(
+        message="Employee account unlocked successfully.",
         data=data,
     )

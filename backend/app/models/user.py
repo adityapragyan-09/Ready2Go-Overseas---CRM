@@ -7,7 +7,7 @@ Passwords are stored as bcrypt hashes via passlib.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.constants import EMPLOYEE
@@ -29,6 +29,10 @@ class User(Base):
     profile_photo: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_password_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_logout: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -70,3 +74,26 @@ class User(Base):
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"
+
+
+class PasswordHistory(Base):
+    """Stores hashed password history to prevent password reuse."""
+
+    __tablename__ = "password_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id], backref="password_history")
+
+    def __repr__(self) -> str:
+        return f"<PasswordHistory user_id={self.user_id}>"

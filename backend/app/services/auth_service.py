@@ -1,54 +1,377 @@
 """
-Ready2Go CRM — Authentication Service
+Ready2Go CRM — Authentication & Security Service
 
-Business logic for user authentication:
-    • Credential validation
-    • JWT token creation
+Business logic for:
+    • Credential validation with account lock protection
+    • JWT token creation and session management
+    • Password management (change, reset, history, policy)
     • Login/logout activity recording
+    • Security event logging
 
 Routes call these functions — they never touch the DB directly.
 """
 
-from datetime import datetime, timezone
-
-from sqlalchemy.orm import Session
+import re
+import secrets
+import string
+from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.activity_log import ActivityLog
-from app.models.user import User
+from app.models.user import PasswordHistory, User
+
+# ── Password Policy ──────────────────────────────
+
+_MIN_PASSWORD_LENGTH = 8
+_PASSWORD_HISTORY_COUNT = 3
+_MAX_FAILED_LOGIN_ATTEMPTS = 5
+_ACCOUNT_LOCK_MINUTES = 30
 
 
-def authenticate_user(db: Session, email: str, password: str) -> User | None:
+def _validate_password_policy(password: str) -> str | None:
     """
-    Validate credentials and return the User if successful.
-    Returns None when the email is not found, the password is
-    wrong, or the account has been deactivated.
+    Validate password against enterprise policy.
+    Returns an error message string if invalid, or None if valid.
+    """
+    if len(password) < _MIN_PASSWORD_LENGTH:
+        return f"Password must be at least {_MIN_PASSWORD_LENGTH} characters long."
+    if not re.search(r"[A-Z]", password):
+        return "Password must contain at least one uppercase letter."
+    if not re.search(r"[a-z]", password):
+        return "Password must contain at least one lowercase letter."
+    if not re.search(r"[0-9]", password):
+        return "Password must contain at least one number."
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?`~]", password):
+        return "Password must contain at least one special character."
+    return None
+
+
+def _check_password_history(db: Session, user_id: int, new_password_hash: str) -> bool:
+    """Check if the new password was used recently (last N entries)."""
+    recent_entries = (
+        db.query(PasswordHistory)
+        .filter(PasswordHistory.user_id == user_id)
+        .order_by(PasswordHistory.created_at.desc())
+        .limit(_PASSWORD_HISTORY_COUNT)
+        .all()
+    )
+    for entry in recent_entries:
+        if verify_password(new_password_hash, entry.password_hash):
+            return False
+    return True
+
+
+def _record_password_history(db: Session, user_id: int, password_hash: str) -> None:
+    """Store hashed password in history and trim to max count."""
+    entry = PasswordHistory(user_id=user_id, password_hash=password_hash)
+    db.add(entry)
+
+    # Trim old entries, keeping only the most recent N
+    total = (
+        db.query(PasswordHistory)
+        .filter(PasswordHistory.user_id == user_id)
+        .count()
+    )
+    if total > _PASSWORD_HISTORY_COUNT:
+        excess = total - _PASSWORD_HISTORY_COUNT
+        old_entries = (
+            db.query(PasswordHistory)
+            .filter(PasswordHistory.user_id == user_id)
+            .order_by(PasswordHistory.created_at.asc())
+            .limit(excess)
+            .all()
+        )
+        for old in old_entries:
+            db.delete(old)
+
+
+def _log_security_event(
+    db: Session,
+    user_id: int,
+    event_type: str,
+    details: str | None = None,
+    ip_address: str | None = None,
+    browser: str | None = None,
+) -> None:
+    """Record a security event in the activity log."""
+    log = ActivityLog(
+        user_id=user_id,
+        login_time=datetime.now(timezone.utc),
+        ip_address=ip_address,
+        browser=browser,
+        device=event_type,
+    )
+    db.add(log)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+def generate_secure_password(length: int = 16) -> str:
+    """Generate a cryptographically secure random password."""
+    chars = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+    return "".join(secrets.choice(chars) for _ in range(length))
+
+
+# ── Authentication ───────────────────────────────
+
+def authenticate_user(
+    db: Session,
+    email: str,
+    password: str,
+    ip_address: str | None = None,
+    browser: str | None = None,
+) -> User | None:
+    """
+    Validate credentials with account lock protection.
+    Returns None when authentication fails.
+    Raises HTTPException if the account is locked.
     """
     user = db.query(User).filter(User.email == email).first()
 
     if user is None:
         return None
 
+    # Check account lock
+    now = datetime.now(timezone.utc)
+    if user.locked_until and user.locked_until > now:
+        _log_security_event(
+            db, user.id, "LOGIN_LOCKED",
+            "Login attempt while account locked",
+            ip_address, browser,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Your account has been temporarily locked due to too many failed login attempts. Please contact your administrator or try again later.",
+        )
+
     if not user.is_active:
         return None
 
     if not verify_password(password, user.password_hash):
+        # Increment failed attempts
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+
+        # Lock account after threshold
+        if user.failed_login_attempts >= _MAX_FAILED_LOGIN_ATTEMPTS:
+            user.locked_until = now + timedelta(minutes=_ACCOUNT_LOCK_MINUTES)
+            _log_security_event(
+                db, user.id, "ACCOUNT_LOCKED",
+                f"Account locked after {_MAX_FAILED_LOGIN_ATTEMPTS} failed attempts",
+                ip_address, browser,
+            )
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        _log_security_event(
+            db, user.id, "LOGIN_FAILED",
+            f"Failed login attempt {user.failed_login_attempts}/{_MAX_FAILED_LOGIN_ATTEMPTS}",
+            ip_address, browser,
+        )
         return None
+
+    # Successful login — reset failed attempts and lock
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return user
 
 
 def generate_token(user: User) -> str:
-    """
-    Create a JWT access token with the user's identity and role.
-    """
+    """Create a JWT access token with the user's identity and role."""
     return create_access_token(
         subject=user.id,
         role=user.role,
         name=user.name,
     )
+
+
+# ── Password Management ──────────────────────────
+
+def change_password(
+    db: Session,
+    user_id: int,
+    current_password: str,
+    new_password: str,
+    confirm_password: str,
+    ip_address: str | None = None,
+    browser: str | None = None,
+) -> User:
+    """
+    Change a user's own password after verification.
+    Validates policy, history, and current credential.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    if not verify_password(current_password, user.password_hash):
+        _log_security_event(db, user_id, "PASSWORD_CHANGE_FAILED", "Incorrect current password", ip_address, browser)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+
+    if new_password != confirm_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password and confirm password do not match.")
+
+    # Validate password policy
+    policy_error = _validate_password_policy(new_password)
+    if policy_error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=policy_error)
+
+    if verify_password(new_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be the same as the current password.")
+
+    # Check password history
+    if not _check_password_history(db, user_id, new_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"You cannot reuse any of your last {_PASSWORD_HISTORY_COUNT} passwords.",
+        )
+
+    # Update password
+    new_hash = hash_password(new_password)
+    user.password_hash = new_hash
+    user.must_change_password = False
+    user.last_password_change = datetime.now(timezone.utc)
+
+    # Increment token version to invalidate other sessions
+    user.token_version += 1
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update password.")
+
+    # Record password history
+    _record_password_history(db, user_id, new_hash)
+
+    _log_security_event(db, user_id, "PASSWORD_CHANGED", "Password changed successfully", ip_address, browser)
+
+    return user
+
+
+def admin_reset_password(
+    db: Session,
+    target_user_id: int,
+    new_password: str,
+    action_by: int,
+    ip_address: str | None = None,
+    browser: str | None = None,
+) -> User:
+    """
+    Admin-only: Reset a user's password with policy validation
+    and set must_change_password flag.
+    """
+    if action_by == target_user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot reset your own password. Use Change Password instead.")
+
+    user = db.query(User).filter(User.id == target_user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
+
+    policy_error = _validate_password_policy(new_password)
+    if policy_error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=policy_error)
+
+    new_hash = hash_password(new_password)
+    user.password_hash = new_hash
+    user.must_change_password = True
+    user.token_version += 1
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password.")
+
+    # Record to password history
+    _record_password_history(db, target_user_id, new_hash)
+
+    _log_security_event(db, target_user_id, "PASSWORD_RESET", f"Password reset by admin #{action_by}", ip_address, browser)
+
+    return user
+
+
+def unlock_account(db: Session, target_user_id: int, action_by: int) -> User:
+    """Admin-only: Unlock a locked user account."""
+    user = db.query(User).filter(User.id == target_user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unlock account.")
+
+    _log_security_event(db, target_user_id, "ACCOUNT_UNLOCKED", f"Account unlocked by admin #{action_by}")
+
+    return user
+
+
+# ── Session Management ───────────────────────────
+
+def get_login_history(db: Session, user_id: int, limit: int = 20) -> list[dict]:
+    """Retrieve login history for a user."""
+    logs = (
+        db.query(ActivityLog)
+        .filter(ActivityLog.user_id == user_id)
+        .order_by(ActivityLog.login_time.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": log.id,
+            "login_time": log.login_time,
+            "logout_time": log.logout_time,
+            "ip_address": log.ip_address,
+            "browser": log.browser,
+            "event_type": log.device or ("login" if log.logout_time is None else "logout"),
+        }
+        for log in logs
+    ]
+
+
+def get_active_sessions(db: Session, user_id: int) -> list[dict]:
+    """Retrieve currently active sessions for a user."""
+    sessions = (
+        db.query(ActivityLog)
+        .filter(
+            ActivityLog.user_id == user_id,
+            ActivityLog.logout_time.is_(None),
+            ActivityLog.login_time.isnot(None),
+        )
+        .order_by(ActivityLog.login_time.desc())
+        .all()
+    )
+    return [
+        {
+            "id": s.id,
+            "login_time": s.login_time,
+            "ip_address": s.ip_address,
+            "browser": s.browser,
+        }
+        for s in sessions
+    ]
 
 
 def record_login(
@@ -58,20 +381,17 @@ def record_login(
     browser: str | None = None,
     device: str | None = None,
 ) -> ActivityLog:
-    """
-    Create a new ActivityLog row capturing the login event.
-    """
+    """Create a new ActivityLog row capturing the login event."""
     now_utc = datetime.now(timezone.utc)
     log = ActivityLog(
         user_id=user_id,
         ip_address=ip_address,
         browser=browser,
-        device=device,
+        device=device or "LOGIN_SUCCESS",
         login_time=now_utc,
     )
     db.add(log)
 
-    # Automatically update user.last_login
     user = db.query(User).filter(User.id == user_id).first()
     if user:
         user.last_login = now_utc
@@ -83,35 +403,13 @@ def record_login(
         db.rollback()
         raise
 
-    # Notification trigger: Login event
-    try:
-        from app.services.notification_service import create_notification
-        user_obj = db.query(User).filter(User.id == user_id).first()
-        user_name = user_obj.name if user_obj else f"User #{user_id}"
-        create_notification(
-            db,
-            title="Employee Login",
-            message=f"{user_name} logged into the CRM portal.",
-            type="info",
-            module="authentication",
-            priority="low",
-            recipient_user_id=user_id,
-            created_by=user_id,
-            reference_type="user",
-            reference_id=user_id,
-        )
-    except Exception:
-        pass  # Non-critical — never block auth flow
+    _log_security_event(db, user_id, "LOGIN_SUCCESS", "Successful login", ip_address, browser)
 
     return log
 
 
 def record_logout(db: Session, user_id: int) -> bool:
-    """
-    Find the most recent login entry for this user that has no
-    logout_time and stamp it with the current UTC time.
-    Returns True if a matching row was found and updated.
-    """
+    """Find and stamp the most recent login entry with logout time."""
     log = (
         db.query(ActivityLog)
         .filter(ActivityLog.user_id == user_id, ActivityLog.logout_time.is_(None))
@@ -123,127 +421,20 @@ def record_logout(db: Session, user_id: int) -> bool:
 
     now_utc = datetime.now(timezone.utc)
     log.logout_time = now_utc
-    
-    # Automatically update user.last_logout
+
     user = db.query(User).filter(User.id == user_id).first()
     if user:
         user.last_logout = now_utc
-        
+
     try:
         db.commit()
     except Exception:
         db.rollback()
         raise
 
-    # Notification trigger: Logout event
-    try:
-        from app.services.notification_service import create_notification
-        user_obj = db.query(User).filter(User.id == user_id).first()
-        user_name = user_obj.name if user_obj else f"User #{user_id}"
-        create_notification(
-            db,
-            title="Employee Logout",
-            message=f"{user_name} logged out of the CRM portal.",
-            type="info",
-            module="authentication",
-            priority="low",
-            recipient_user_id=user_id,
-            created_by=user_id,
-            reference_type="user",
-            reference_id=user_id,
-        )
-    except Exception:
-        pass
+    _log_security_event(db, user_id, "LOGOUT", "User logged out")
 
     return True
-
-
-def change_password(
-    db: Session,
-    user_id: int,
-    current_password: str,
-    new_password: str,
-    confirm_password: str,
-) -> User:
-    """
-    Change a user's own password after verifying the current password.
-
-    Validates:
-        - Current password matches stored hash
-        - New password and confirm match
-        - New password is different from current
-        - New password meets minimum length
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-
-    if not verify_password(current_password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
-
-    if new_password != confirm_password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password and confirm password do not match.")
-
-    if len(new_password) < 6:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters long.")
-
-    if verify_password(new_password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be the same as the current password.")
-
-    user.password_hash = hash_password(new_password)
-    user.must_change_password = False
-
-    try:
-        db.commit()
-        db.refresh(user)
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update password.")
-
-    return user
-
-
-def admin_reset_password(
-    db: Session,
-    target_user_id: int,
-    new_password: str,
-    action_by: int,
-) -> User:
-    """
-    Admin-only: Reset a user's password and flag must_change_password.
-    """
-    user = db.query(User).filter(User.id == target_user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
-
-    if len(new_password) < 6:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters long.")
-
-    user.password_hash = hash_password(new_password)
-    user.must_change_password = True
-
-    try:
-        db.commit()
-        db.refresh(user)
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password.")
-
-    # Record activity log
-    log = ActivityLog(
-        user_id=target_user_id,
-        login_time=datetime.now(timezone.utc),
-        ip_address=None,
-        browser=None,
-        device=None,
-    )
-    db.add(log)
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-
-    return user
 
 
 def get_user_by_id(db: Session, user_id: int) -> User | None:

@@ -12,6 +12,6 @@ from app.models.activity_log import ActivityLog  # noqa: F401
 from app.models.applicant import Applicant  # noqa: F401
 from app.models.document import Document  # noqa: F401
 from app.models.message import Message  # noqa: F401
-from app.models.user import User  # noqa: F401
+from app.models.user import PasswordHistory, User  # noqa: F401
 from app.models.progress import ProgressHistory  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
