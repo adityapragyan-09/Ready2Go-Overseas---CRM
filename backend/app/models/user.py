@@ -28,7 +28,7 @@ class User(Base):
     department: Mapped[str | None] = mapped_column(String(100), nullable=True)
     profile_photo: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    must_change_password: Mapped[bool] = deferred(mapped_column(Boolean, default=False, nullable=False))
 
     # Deferred columns: lazily loaded to support progressive migration rollout.
     # If these columns don't exist in the database yet, SQLAlchemy skips them
