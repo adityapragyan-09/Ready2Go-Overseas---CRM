@@ -20,6 +20,7 @@ class EmployeeOut(BaseModel):
     department: str | None = None
     profile_photo: str | None = Field(default=None, serialization_alias="profile_photo")
     is_active: bool
+    must_change_password: bool = Field(default=False, serialization_alias="must_change_password")
     last_login: datetime | None = None
     last_logout: datetime | None = None
     created_at: datetime

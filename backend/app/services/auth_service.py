@@ -13,7 +13,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, verify_password
+from fastapi import HTTPException, status
+
+from app.core.security import create_access_token, hash_password, verify_password
 from app.models.activity_log import ActivityLog
 from app.models.user import User
 
@@ -154,6 +156,94 @@ def record_logout(db: Session, user_id: int) -> bool:
         pass
 
     return True
+
+
+def change_password(
+    db: Session,
+    user_id: int,
+    current_password: str,
+    new_password: str,
+    confirm_password: str,
+) -> User:
+    """
+    Change a user's own password after verifying the current password.
+
+    Validates:
+        - Current password matches stored hash
+        - New password and confirm match
+        - New password is different from current
+        - New password meets minimum length
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    if not verify_password(current_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+
+    if new_password != confirm_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password and confirm password do not match.")
+
+    if len(new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters long.")
+
+    if verify_password(new_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password cannot be the same as the current password.")
+
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = False
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update password.")
+
+    return user
+
+
+def admin_reset_password(
+    db: Session,
+    target_user_id: int,
+    new_password: str,
+    action_by: int,
+) -> User:
+    """
+    Admin-only: Reset a user's password and flag must_change_password.
+    """
+    user = db.query(User).filter(User.id == target_user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
+
+    if len(new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters long.")
+
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = True
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password.")
+
+    # Record activity log
+    log = ActivityLog(
+        user_id=target_user_id,
+        login_time=datetime.now(timezone.utc),
+        ip_address=None,
+        browser=None,
+        device=None,
+    )
+    db.add(log)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return user
 
 
 def get_user_by_id(db: Session, user_id: int) -> User | None:

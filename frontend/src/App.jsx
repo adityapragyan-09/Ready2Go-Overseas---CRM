@@ -17,6 +17,7 @@ import NotFound from './pages/Errors/NotFound';
 import ServerError from './pages/Errors/ServerError';
 
 import { ActivityLogs } from './pages/ActivityLogs/ActivityLogs';
+import ChangePasswordPage from './pages/Auth/ChangePasswordPage';
 
 function App() {
   return (
@@ -45,6 +46,9 @@ function App() {
 
             {/* Public Auth */}
             <Route path="/login" element={<Login />} />
+
+            {/* Force Password Change Page (requires auth, no DashboardLayout) */}
+            <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
 
             {/* Protected Area wrapping DashboardLayout */}
             <Route element={<ProtectedRoute><ErrorBoundary><DashboardLayout /></ErrorBoundary></ProtectedRoute>}>

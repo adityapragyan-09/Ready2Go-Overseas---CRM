@@ -20,6 +20,7 @@ class UserOut(BaseModel):
     phone: str | None = None
     role: str
     is_active: bool
+    must_change_password: bool = False
     created_at: datetime
     updated_at: datetime
 

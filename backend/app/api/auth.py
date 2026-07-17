@@ -15,10 +15,11 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest
+from app.schemas.auth import ChangePasswordRequest, LoginRequest
 from app.schemas.user import UserOut
 from app.services.auth_service import (
     authenticate_user,
+    change_password,
     generate_token,
     record_login,
     record_logout,
@@ -91,3 +92,30 @@ def logout(
         return error_response("No active session found to close.")
 
     return success_response("Logout recorded successfully.")
+
+
+# ── POST /change-password ────────────────────────
+
+@router.post("/change-password")
+def change_password_route(
+    body: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Change the password for the currently authenticated user.
+    Requires current password verification.
+    """
+    user = change_password(
+        db,
+        user_id=current_user.id,
+        current_password=body.current_password,
+        new_password=body.new_password,
+        confirm_password=body.confirm_password,
+    )
+
+    user_data = UserOut.model_validate(user).model_dump()
+    return success_response(
+        "Password changed successfully.",
+        data=user_data,
+    )

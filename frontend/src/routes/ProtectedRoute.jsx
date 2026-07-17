@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuth';
  * Route guard component that protects sub-routes from unauthenticated users.
  */
 const ProtectedRoute = ({ children, requireAdmin = false }) => {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, user, mustChangePassword } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -27,6 +27,11 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
   if (!isAuthenticated) {
     // Save the location they were trying to access to redirect them back after login
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Force password change: redirect unless already on the change-password page
+  if (mustChangePassword && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />;
   }
 
   if (requireAdmin && user?.role !== 'admin') {
