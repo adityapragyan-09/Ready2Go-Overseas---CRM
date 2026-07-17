@@ -132,7 +132,7 @@ def authenticate_user(
     Returns None when authentication fails.
     Raises HTTPException if the account is locked.
     """
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import OperationalError, ProgrammingError
 
     user = db.query(User).filter(User.email == email).first()
 
@@ -145,7 +145,7 @@ def authenticate_user(
     try:
         locked_until = user.locked_until
         failed_attempts = user.failed_login_attempts or 0
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         locked_until = None
         failed_attempts = 0
 
@@ -161,7 +161,7 @@ def authenticate_user(
         return None
 
     if not verify_password(password, user.password_hash):
-        # Increment failed attempts
+        # Increment failed attempts (if security columns exist)
         try:
             user.failed_login_attempts = failed_attempts + 1
             if user.failed_login_attempts >= _MAX_FAILED_LOGIN_ATTEMPTS:
@@ -174,11 +174,15 @@ def authenticate_user(
         _log_security_event(db, user.id, "LOGIN_FAILED", f"Failed ({failed_attempts + 1}/{_MAX_FAILED_LOGIN_ATTEMPTS})", ip_address, browser)
         return None
 
-    # Successful login — reset
+    # Successful login — reset (if security columns exist)
+    from sqlalchemy.exc import OperationalError, ProgrammingError
     try:
         user.failed_login_attempts = 0
         user.locked_until = None
         db.commit()
+    except (OperationalError, ProgrammingError):
+        db.rollback()
+        # Columns don't exist yet — login still succeeds without tracking
     except Exception:
         db.rollback()
 
