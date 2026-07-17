@@ -278,8 +278,9 @@ export const ApplicantsPage = () => {
 
   // Helpers
   const getAdvisorName = (id) => {
+    if (!id) return 'Unassigned';
     const emp = employees.find(e => e.id === Number(id));
-    return emp ? emp.name : 'Unassigned';
+    return emp ? (emp.full_name || emp.name || `Advisor #${id}`) : 'Unassigned';
   };
 
   const formatKeyName = (key) => {

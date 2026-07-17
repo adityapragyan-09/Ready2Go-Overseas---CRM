@@ -410,10 +410,10 @@ const EmployeeProfile = ({ currentUser }) => {
     <Card className="max-w-xl text-left border border-slate-100">
       <div className="flex gap-4 items-center border-b border-slate-100 pb-5 mb-5">
         <div className="w-16 h-16 rounded-full border flex items-center justify-center text-xl font-bold bg-slate-50 text-brand-orange">
-          {photo ? <img src={photo} alt="" className="w-full h-full object-cover rounded-full" /> : currentUser?.full_name?.substring(0, 2).toUpperCase()}
+          {photo ? <img src={photo} alt="" className="w-full h-full object-cover rounded-full" /> : (currentUser?.name || currentUser?.full_name || 'US').substring(0, 2).toUpperCase()}
         </div>
         <div>
-          <h3 className="text-sm font-black text-slate-800">{currentUser?.full_name}</h3>
+          <h3 className="text-sm font-black text-slate-800">{currentUser?.name || currentUser?.full_name || 'User'}</h3>
           <p className="text-xs text-slate-400 font-semibold">{currentUser?.email} &bull; <span className="uppercase text-brand-orange font-bold">{currentUser?.role}</span></p>
         </div>
       </div>
