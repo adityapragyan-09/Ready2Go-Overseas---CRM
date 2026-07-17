@@ -8,7 +8,7 @@ Passwords are stored as bcrypt hashes via passlib.
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.constants import EMPLOYEE
 from app.db.base import Base
@@ -29,10 +29,15 @@ class User(Base):
     profile_photo: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_password_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Deferred columns: lazily loaded to support progressive migration rollout.
+    # If these columns don't exist in the database yet, SQLAlchemy skips them
+    # in the initial SELECT and loads them on first access.
+    failed_login_attempts: Mapped[int] = deferred(mapped_column(Integer, default=0, nullable=False))
+    locked_until: Mapped[datetime | None] = deferred(mapped_column(DateTime(timezone=True), nullable=True))
+    token_version: Mapped[int] = deferred(mapped_column(Integer, default=0, nullable=False))
+    last_password_change: Mapped[datetime | None] = deferred(mapped_column(DateTime(timezone=True), nullable=True))
+
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_logout: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
