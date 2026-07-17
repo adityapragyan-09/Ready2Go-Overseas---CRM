@@ -272,10 +272,9 @@ def update_employee_status(db: Session, employee_id: int, is_active: bool, actio
 
 
 def reset_employee_password(db: Session, employee_id: int, new_password: str) -> User:
-    """Reset employee password and force password change on next login."""
+    """Hash new password and update user record."""
     user = get_employee_by_id(db, employee_id)
     user.password_hash = hash_password(new_password)
-    user.must_change_password = True
     try:
         db.commit()
         db.refresh(user)
@@ -289,7 +288,7 @@ def reset_employee_password(db: Session, employee_id: int, new_password: str) ->
         create_notification(
             db,
             title="Password Reset",
-            message=f"Password for employee '{user.name}' has been reset by admin. Employee must change password on next login.",
+            message=f"Password for employee '{user.name}' has been reset by admin.",
             type="warning",
             module="employee",
             priority="high",

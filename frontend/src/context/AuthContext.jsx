@@ -57,20 +57,12 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   };
 
-  const mustChangePassword = user?.must_change_password === true;
-
-  const updateUser = (updatedUser) => {
-    setUser(updatedUser);
-  };
-
   const value = {
     user,
     loading,
     login,
     logout,
-    updateUser,
     isAuthenticated: !!user,
-    mustChangePassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,8 +10,6 @@ export const useAuth = () => {
     loading: context.loading,
     login: context.login,
     logout: context.logout,
-    updateUser: context.updateUser,
     isAuthenticated: context.isAuthenticated,
-    mustChangePassword: context.mustChangePassword,
   };
 };

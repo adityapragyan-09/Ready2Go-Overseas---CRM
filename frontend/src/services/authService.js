@@ -43,27 +43,6 @@ const authService = {
   },
 
   /**
-   * Change the current user's password
-   */
-  async changePassword(currentPassword, newPassword, confirmPassword) {
-    const response = await api.post('/auth/change-password', {
-      current_password: currentPassword,
-      new_password: newPassword,
-      confirm_password: confirmPassword,
-    });
-    if (response.data && response.data.success) {
-      // Update stored user to reflect must_change_password = false
-      const storedUser = this.getStoredUser();
-      if (storedUser) {
-        storedUser.must_change_password = false;
-        localStorage.setItem('user', JSON.stringify(storedUser));
-      }
-      return { success: true, user: response.data.data };
-    }
-    return { success: false, message: response.data?.message || 'Failed to change password.' };
-  },
-
-  /**
    * Synchronously check if token exists in client storage
    */
   isAuthenticated() {
