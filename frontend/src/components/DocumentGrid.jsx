@@ -200,6 +200,48 @@ export const DocumentGrid = ({ documents = [], employees = [], onDeleteSuccess }
         </div>
       </div>
 
+      {/* Download All Button */}
+      {filteredDocuments.length > 0 && (
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={async () => {
+              // Find applicant_id from the first document
+              const applicantId = filteredDocuments[0]?.applicant_id;
+              if (!applicantId) {
+                toast.error('No applicant ID found for these documents.');
+                return;
+              }
+              try {
+                const response = await fetch(
+                  `${import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL}/documents/applicant/${applicantId}/download-all`,
+                  { headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` } }
+                );
+                if (!response.ok) {
+                  const err = await response.json().catch(() => ({}));
+                  throw new Error(err.detail || 'Failed to download ZIP');
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `documents-${applicantId}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                toast.success('Documents downloaded as ZIP.');
+              } catch (err) {
+                toast.error(err.message || 'Failed to download documents.');
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange/90 transition-all shadow-sm"
+          >
+            <FileDown size={14} />
+            Download ZIP
+          </button>
+        </div>
+      )}
+
       {/* Grid of Documents */}
       {filteredDocuments.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 border border-dashed border-slate-200 rounded-2xl bg-white/40 backdrop-blur-sm">

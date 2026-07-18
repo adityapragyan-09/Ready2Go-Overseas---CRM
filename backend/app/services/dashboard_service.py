@@ -551,11 +551,13 @@ def get_employees(db: Session, current_user: User) -> List[Dict[str, Any]]:
         docs_uploaded = docs_uploaded_counts.get(u.id, 0)
         avg_time = avg_processing_times.get(u.id)
 
+        active_cases = assigned - completed
         analytics.append({
             "employee_id": u.id,
             "name": u.name,
             "role": u.role,
             "applicants_assigned": assigned,
+            "active_cases": max(0, active_cases),
             "completed_cases": completed,
             "pending_cases": pending,
             "documents_pending": docs_pending,

@@ -409,84 +409,42 @@ export const Dashboard = () => {
           </div>
         </Card>
 
-        {/* Document storage stats */}
-        <Card title="Document Distribution" subtitle="Upload summaries & storage limits">
-          <div className="grid grid-cols-3 gap-4 mb-6 border-b border-slate-50 pb-4 text-center">
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Documents</span>
-              <h5 className="text-lg font-extrabold text-slate-800 mt-0.5">
-                {charts?.document_analytics?.documents_uploaded || 0}
-              </h5>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Space Used</span>
-              <h5 className="text-lg font-extrabold text-slate-800 mt-0.5">
-                {charts?.document_analytics?.storage_usage ? `${(charts.document_analytics.storage_usage / 1024).toFixed(1)} KB` : '0 KB'}
-              </h5>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Pending</span>
-              <h5 className="text-lg font-extrabold text-brand-orange mt-0.5">
-                {charts?.document_analytics?.pending_documents || 0}
-              </h5>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <span className="text-xs font-bold text-slate-500 uppercase block mb-1">Largest Storage Files</span>
-            {charts?.document_analytics?.largest_documents && charts.document_analytics.largest_documents.length > 0 ? (
-              charts.document_analytics.largest_documents.map((doc, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl text-xs">
-                  <div className="truncate pr-4 text-left">
-                    <p className="font-semibold text-slate-700 truncate">{doc.original_file_name}</p>
-                    <p className="text-[10px] text-slate-400">Applicant: {doc.applicant_name}</p>
-                  </div>
-                  <span className="font-bold text-slate-500 shrink-0">{(doc.file_size / 1024).toFixed(1)} KB</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-slate-400 text-xs py-4">No large documents recorded.</div>
-            )}
-          </div>
-        </Card>
       </div>
 
       {/* ── EMPLOYEE PERFORMANCE & WORKLOAD TABLE ── */}
-      <Card title="Advisor Workload & Productivity" subtitle="Real-time case assignment & completion metrics">
+      <Card title="Advisor Workload & Productivity" subtitle="Active, completed, and pending cases by advisor">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase">
                 <th className="py-3 px-4">Advisor Name</th>
-                <th className="py-3 px-4 text-center">Assigned</th>
-                <th className="py-3 px-4 text-center">Completed</th>
-                <th className="py-3 px-4 text-center">Pending</th>
-                <th className="py-3 px-4 text-center">Avg Days to Complete</th>
-                <th className="py-3 px-4">Last Active</th>
+                <th className="py-3 px-4 text-center">Active Cases</th>
+                <th className="py-3 px-4 text-center">Completed Cases</th>
+                <th className="py-3 px-4 text-center">Pending Cases</th>
               </tr>
             </thead>
             <tbody>
               {getFilteredEmployees().length > 0 ? (
                 getFilteredEmployees().map((emp, idx) => (
-                  <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                  <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        // Show advisor detail — reuses existing navigation
+                        if (emp.employee_id) {
+                          navigate(`/employees?id=${emp.employee_id}&view=details`);
+                        }
+                      }}>
                     <td className="py-3 px-4 text-left">
                       <p className="font-bold text-slate-800">{emp.name}</p>
                       <p className="text-[10px] text-slate-400 capitalize">{emp.role}</p>
                     </td>
-                    <td className="py-3 px-4 text-center font-bold text-slate-700">{emp.applicants_assigned}</td>
-                    <td className="py-3 px-4 text-center text-emerald-600 font-semibold">{emp.completed_cases}</td>
-                    <td className="py-3 px-4 text-center text-brand-orange font-semibold">{emp.pending_cases}</td>
-                    <td className="py-3 px-4 text-center font-bold text-slate-500">
-                      {emp.average_processing_time ? `${emp.average_processing_time.toFixed(1)} days` : '--'}
-                    </td>
-                    <td className="py-3 px-4 text-slate-500">
-                      {emp.latest_login ? new Date(emp.latest_login).toLocaleString() : 'Never'}
-                    </td>
+                    <td className="py-3 px-4 text-center font-bold text-slate-700">{emp.active_cases || 0}</td>
+                    <td className="py-3 px-4 text-center text-emerald-600 font-semibold">{emp.completed_cases || 0}</td>
+                    <td className="py-3 px-4 text-center text-brand-orange font-semibold">{emp.pending_cases || 0}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">No advisor workload metrics matching filter.</td>
+                  <td colSpan={4} className="py-8 text-center text-slate-400">No advisor workload metrics matching filter.</td>
                 </tr>
               )}
             </tbody>

@@ -182,3 +182,17 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Storage service is currently unavailable.",
         )
+
+
+def download_file_as_bytes(file_url: str) -> bytes:
+    """Download a file from a signed URL and return its contents as bytes."""
+    try:
+        response = requests.get(file_url, timeout=60)
+        response.raise_for_status()
+        return response.content
+    except requests.RequestException as e:
+        logger.exception("Failed to download file from %s", file_url[:80])
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to download file from storage.",
+        )
