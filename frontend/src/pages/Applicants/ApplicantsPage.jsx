@@ -454,7 +454,7 @@ export const ApplicantsPage = () => {
                           <Calendar size={16} />
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assigned Counselor</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Employee Handling</p>
                           <p className="font-bold text-slate-700 mt-0.5">{getAdvisorName(selectedApplicant.assigned_to)}</p>
                         </div>
                       </div>

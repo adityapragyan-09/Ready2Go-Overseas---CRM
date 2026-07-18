@@ -279,11 +279,17 @@ export const ApplicantForm = ({
             className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white/70 backdrop-blur-sm focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10 outline-none transition-all duration-200 text-sm text-slate-800"
           >
             <option value="">Unassigned</option>
-            {employees.map((emp) => (
+            {employees
+              .filter(emp => emp.role !== 'admin' && emp.is_active !== false)
+              .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+              .map((emp) => (
               <option key={emp.id} value={emp.id}>
-                {emp.name} ({emp.role})
+                {emp.name}
               </option>
             ))}
+            {employees.filter(emp => emp.role !== 'admin' && emp.is_active !== false).length === 0 && (
+              <option value="" disabled>No active employees available</option>
+            )}
           </select>
           {errors.assigned_to && (
             <span className="text-xs font-semibold text-red-500">{errors.assigned_to.message}</span>

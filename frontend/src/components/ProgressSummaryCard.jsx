@@ -102,7 +102,7 @@ export const ProgressSummaryCard = ({ applicant, latestHistory }) => {
             <User className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-semibold uppercase">Assigned Counselor</p>
+            <p className="text-xs text-slate-400 font-semibold uppercase">Employee Handling</p>
             <p className="text-sm font-bold text-slate-800 mt-1">
               {applicant?.assigned_employee_name || 'Unassigned'}
             </p>
