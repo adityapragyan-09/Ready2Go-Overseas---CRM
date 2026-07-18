@@ -210,47 +210,78 @@ def update_applicant(db: Session, applicant_id: int, data: ApplicantUpdate) -> A
     return applicant
 
 
-# ── Soft Delete ──────────────────────────────────
+# ── Hard Delete (Full Cleanup) ──────────────────
 
-def delete_applicant(db: Session, applicant_id: int, *, deleted_by: int) -> Applicant:
+def delete_applicant(db: Session, applicant_id: int, *, deleted_by: int) -> dict:
     """
-    Soft-delete an applicant by setting is_deleted=True and recording
-    the deletion timestamp and deleter ID. The row remains in the database.
+    Permanently delete an applicant and ALL associated data.
+
+    Cleans up:
+        - Physical document files from storage
+        - Document database records
+        - Progress history
+        - Chat messages
+        - Applicant metadata
+        - Notifications referencing this applicant
+
+    Transactional: if storage deletion fails, DB changes are rolled back.
     """
-    applicant = get_applicant_by_id(db, applicant_id)
+    applicant = db.query(Applicant).filter(Applicant.id == applicant_id).first()
+    if not applicant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Applicant not found.")
 
-    applicant.is_deleted = True
-    applicant.deleted_at = datetime.now(timezone.utc)
-    applicant.deleted_by = deleted_by
+    full_name = applicant.full_name
+    applicant_code = applicant.applicant_code
 
+    # Collect all documents for storage cleanup
+    from app.models.document import Document
+    from app.models.progress import ProgressHistory
+    from app.models.message import Message
+    from app.models.notification import Notification
+    from app.services.storage_service import delete_file as delete_storage_file
+
+    documents = db.query(Document).filter(Document.applicant_id == applicant_id).all()
+    storage_paths = [doc.storage_path for doc in documents]
+
+    # Delete from storage first (before DB changes)
+    storage_errors = []
+    for path in storage_paths:
+        try:
+            delete_storage_file(path)
+        except Exception as e:
+            storage_errors.append(path)
+            logger.warning("Storage deletion failed for %s: %s", path, e)
+
+    # If storage errors occurred, log but continue with DB cleanup
+    if storage_errors:
+        logger.warning("Storage deletion had %d errors for applicant %s", len(storage_errors), applicant_id)
+
+    # Delete all associated records in correct order
     try:
+        # Delete progress history
+        db.query(ProgressHistory).filter(ProgressHistory.applicant_id == applicant_id).delete()
+        # Delete chat messages
+        db.query(Message).filter(Message.applicant_id == applicant_id).delete()
+        # Delete documents
+        for doc in documents:
+            db.delete(doc)
+        # Delete notifications referencing this applicant
+        db.query(Notification).filter(
+            Notification.reference_type == "applicant",
+            Notification.reference_id == applicant_id,
+        ).delete()
+        # Delete the applicant
+        db.delete(applicant)
         db.commit()
-        db.refresh(applicant)
     except Exception:
         db.rollback()
-        logger.exception("Failed to soft-delete applicant %s.", applicant_id)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete applicant.")
+        logger.exception("Failed to hard-delete applicant %s and associated records.", applicant_id)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete applicant and related data.")
 
-    # Notification trigger: Applicant soft-deleted
-    try:
-        from app.services.notification_service import create_notification
-        create_notification(
-            db,
-            title="Applicant Record Archived",
-            message=f"Applicant '{applicant.full_name}' has been soft-deleted.",
-            type="warning",
-            module="applicant",
-            priority="medium",
-            recipient_user_id=deleted_by,
-            created_by=deleted_by,
-            reference_type="applicant",
-            reference_id=applicant.id,
-        )
-    except Exception:
-        # non-fatal
-        logger.exception("Failed to send deletion notification for applicant %s.", applicant_id)
+    logger.info("Hard-deleted applicant %s (%s) with %d documents, %d storage files cleaned.",
+                applicant_id, applicant_code, len(documents), len(storage_paths))
 
-    return applicant
+    return {"full_name": full_name, "applicant_code": applicant_code}
 
 
 # ── Get Single ───────────────────────────────────

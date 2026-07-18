@@ -17,6 +17,8 @@ export const ActivityLogs = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedDeleteDate, setSelectedDeleteDate] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -73,6 +75,64 @@ export const ActivityLogs = () => {
           </button>
         }
       />
+
+      {/* ── DELETE LOGS BY DATE ── */}
+      <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="flex-1">
+          <p className="text-xs font-bold text-amber-800">Delete Activity Logs</p>
+          <p className="text-[10px] text-amber-600">Select a date to permanently remove all logs from that day.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={selectedDeleteDate}
+            onChange={(e) => setSelectedDeleteDate(e.target.value)}
+            className="px-3 py-2 border border-amber-200 bg-white rounded-xl text-xs font-semibold text-slate-700 focus:border-amber-500 outline-none"
+          />
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={!selectedDeleteDate}
+            className="px-4 py-2 rounded-xl bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all disabled:opacity-50"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div onClick={() => setShowDeleteConfirm(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 text-left z-10">
+            <h3 className="text-sm font-bold text-slate-800">Confirm Deletion</h3>
+            <p className="text-xs text-slate-500 mt-2">
+              Are you sure you want to delete all activity logs from <strong>{selectedDeleteDate}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all">
+                Cancel
+              </button>
+              <button onClick={async () => {
+                try {
+                  const res = await api.delete(`/activity-logs/date/${selectedDeleteDate}`);
+                  if (res.data?.success) {
+                    toast.success(res.data.message || 'Logs deleted successfully.');
+                    setShowDeleteConfirm(false);
+                    setSelectedDeleteDate('');
+                    fetchLogs();
+                  } else {
+                    toast.error(res.data?.message || 'Failed to delete logs.');
+                  }
+                } catch (err) {
+                  toast.error(err.response?.data?.message || 'Failed to delete logs.');
+                }
+              }} className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all">
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Card>
         {isLoading ? (

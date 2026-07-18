@@ -167,8 +167,8 @@ def delete_applicant_route(
     Delete an applicant record.
     Requires a valid JWT token.
     """
-    applicant = delete_applicant(db, id, deleted_by=current_user.id)
+    result = delete_applicant(db, id, deleted_by=current_user.id)
 
     return success_response(
-        message=f"Applicant '{applicant.full_name}' deleted successfully.",
+        message=f"Applicant '{result['full_name']}' ({result['applicant_code']}) and all associated records deleted successfully.",
     )

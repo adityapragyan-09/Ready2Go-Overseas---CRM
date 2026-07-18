@@ -13,7 +13,11 @@ import {
   Cloud,
   Server,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  Eye,
+  X,
+  MessageSquare,
+  FileDown
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../context/NotificationContext';
@@ -38,6 +42,31 @@ export const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   
   const isAdmin = user?.role === 'admin';
+
+  // Workload detail drawer
+  const [selectedAdvisor, setSelectedAdvisor] = useState(null);
+  const [advisorApplicants, setAdvisorApplicants] = useState([]);
+  const [isLoadingAdvisor, setIsLoadingAdvisor] = useState(false);
+  const [selectedDeleteDate, setSelectedDeleteDate] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const loadAdvisorApplicants = async (employeeId, name) => {
+    if (!employeeId) return;
+    setIsLoadingAdvisor(true);
+    setSelectedAdvisor({ id: employeeId, name });
+    try {
+      const res = await api.get(`/applicants?assigned_to=${employeeId}&page_size=100`);
+      if (res.data?.success) {
+        setAdvisorApplicants(res.data.data.applicants || []);
+      } else {
+        setAdvisorApplicants([]);
+      }
+    } catch (err) {
+      setAdvisorApplicants([]);
+    } finally {
+      setIsLoadingAdvisor(false);
+    }
+  };
 
   // Load dashboard dataset
   const loadDashboardData = async () => {
@@ -421,18 +450,13 @@ export const Dashboard = () => {
                 <th className="py-3 px-4 text-center">Active Cases</th>
                 <th className="py-3 px-4 text-center">Completed Cases</th>
                 <th className="py-3 px-4 text-center">Pending Cases</th>
+                <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {getFilteredEmployees().length > 0 ? (
                 getFilteredEmployees().map((emp, idx) => (
-                  <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer"
-                      onClick={() => {
-                        // Show advisor detail — reuses existing navigation
-                        if (emp.employee_id) {
-                          navigate(`/employees?id=${emp.employee_id}&view=details`);
-                        }
-                      }}>
+                  <tr key={idx} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                     <td className="py-3 px-4 text-left">
                       <p className="font-bold text-slate-800">{emp.name}</p>
                       <p className="text-[10px] text-slate-400 capitalize">{emp.role}</p>
@@ -440,17 +464,84 @@ export const Dashboard = () => {
                     <td className="py-3 px-4 text-center font-bold text-slate-700">{emp.active_cases || 0}</td>
                     <td className="py-3 px-4 text-center text-emerald-600 font-semibold">{emp.completed_cases || 0}</td>
                     <td className="py-3 px-4 text-center text-brand-orange font-semibold">{emp.pending_cases || 0}</td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => loadAdvisorApplicants(emp.employee_id, emp.name)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-blue/5 text-brand-blue text-[10px] font-bold hover:bg-brand-blue/10 transition-all"
+                      >
+                        <Eye size={12} />
+                        View Workload
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-slate-400">No advisor workload metrics matching filter.</td>
+                  <td colSpan={5} className="py-8 text-center text-slate-400">No advisor workload metrics matching filter.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </Card>
+
+      {/* ── ADVISOR WORKLOAD DETAIL DRAWER ── */}
+      {selectedAdvisor && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+          <div onClick={() => setSelectedAdvisor(null)} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+          <div className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col p-6 animate-slide-left z-10 border-l border-slate-100 text-left overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Advisor Workload</h3>
+                <h2 className="text-lg font-black text-slate-800 mt-1">{selectedAdvisor.name}</h2>
+              </div>
+              <button onClick={() => setSelectedAdvisor(null)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50">
+                <X size={18} />
+              </button>
+            </div>
+
+            {isLoadingAdvisor ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-brand-orange border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            ) : advisorApplicants.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-slate-400">No applicants are currently assigned to this advisor.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {advisorApplicants.map((app) => (
+                  <div key={app.id} className="p-4 bg-white border border-slate-100 rounded-xl hover:border-brand-orange/30 transition-all shadow-sm">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{app.full_name}</p>
+                        <p className="text-[10px] text-slate-400">{app.country || '—'} &bull; {app.visa_type}</p>
+                      </div>
+                      <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {app.status?.replace('_', ' ') || '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-50">
+                      <button onClick={() => navigate(`/applicants?view=details&id=${app.id}`)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-brand-blue hover:text-brand-orange transition-colors">
+                        <Eye size={12} /> Profile
+                      </button>
+                      <button onClick={() => navigate(`/applicants?view=details&id=${app.id}`)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-brand-blue hover:text-brand-orange transition-colors">
+                        <FileText size={12} /> Documents
+                      </button>
+                      <button onClick={() => navigate(`/applicants?view=details&id=${app.id}`)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-brand-blue hover:text-brand-orange transition-colors">
+                        <MessageSquare size={12} /> Chat
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── RECENT ACTIVITY FEED & NOTIFICATION PANEL ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
