@@ -41,8 +41,13 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
         .all()
     )
 
-    # Batch 2: Employee + document counts (two independent queries)
-    documents_uploaded = db.query(func.count(Document.id)).filter(Document.is_deleted == False).scalar() or 0
+    # Batch 2: Employee + document counts (join with active applicants only)
+    documents_uploaded = (
+        db.query(func.count(Document.id))
+        .join(Applicant, Document.applicant_id == Applicant.id)
+        .filter(Document.is_deleted == False, Applicant.is_deleted == False)
+        .scalar() or 0
+    )
     active_employees = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0
 
     # Batch 3: Today's activity

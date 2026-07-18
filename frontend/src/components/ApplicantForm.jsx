@@ -268,10 +268,10 @@ export const ApplicantForm = ({
           )}
         </div>
 
-        {/* Assigned Advisor */}
+        {/* Employee Handling */}
         <div className="flex flex-col gap-1.5 w-full">
           <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-            Assigned Counsel / Employee
+            Employee Handling
           </label>
           <select
             {...register('assigned_to')}

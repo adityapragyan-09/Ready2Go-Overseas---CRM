@@ -53,7 +53,7 @@ export const ApplicantTable = ({
               <th scope="col" className="py-3.5 px-4">Country</th>
               <th scope="col" className="py-3.5 px-4">Visa Type</th>
               <th scope="col" className="py-3.5 px-4">Status</th>
-              <th scope="col" className="py-3.5 px-4">Assigned Advisor</th>
+              <th scope="col" className="py-3.5 px-4">Employee Handling</th>
               <th scope="col" className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>

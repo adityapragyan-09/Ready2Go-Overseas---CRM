@@ -106,7 +106,7 @@ export const FilterPanel = ({
 
         {/* Assigned Counselors Dropdown */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assigned Advisor</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Employee Handling</span>
           <select
             value={filters.assignedEmployee || ''}
             onChange={(e) => handleSelectChange('assignedEmployee', e.target.value)}
