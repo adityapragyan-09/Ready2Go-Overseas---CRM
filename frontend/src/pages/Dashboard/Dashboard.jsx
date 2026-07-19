@@ -192,37 +192,39 @@ export const Dashboard = () => {
       </div>
 
       {/* ── QUICK ACTIONS ── */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
+      <div className={`grid grid-cols-2 sm:grid-cols-2 ${isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
         <button
           onClick={() => navigate('/applicants?view=add')}
-          className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-r from-brand-blue to-brand-blue/90 text-white font-semibold text-sm hover:shadow-lg hover:shadow-brand-blue/20 transition-brand group"
+          className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-brand-blue text-white text-xs font-bold hover:bg-brand-blue/90 hover:shadow-lg hover:shadow-brand-blue/10 transition-all active:scale-[0.98]"
         >
-          <div className="p-2 rounded-xl bg-white/10 group-hover:scale-110 transition-transform">
-            <Plus className="h-4 w-4" />
-          </div>
-          <span>Add Applicant</span>
+          <Plus className="h-4 w-4" />
+          Add Applicant
         </button>
 
         {isAdmin && (
           <button
-            onClick={() => navigate('/employees?action=add')}
-            className="flex items-center gap-3 p-4 rounded-2xl bg-white border border-slate-100/80 shadow-md shadow-brand-blue/5 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-brand group"
+            onClick={() => navigate('/employees?view=add')}
+            className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange/90 hover:shadow-lg hover:shadow-brand-orange/10 transition-all active:scale-[0.98]"
           >
-            <div className="p-2 rounded-xl bg-slate-100 group-hover:scale-110 transition-transform text-slate-600">
-              <UserPlus className="h-4 w-4" />
-            </div>
-            <span>Add Employee</span>
+            <UserPlus className="h-4 w-4" />
+            Add Employee
           </button>
         )}
 
         <button
           onClick={() => navigate('/applicants')}
-          className="flex items-center gap-3 p-4 rounded-2xl bg-white border border-slate-100/80 shadow-md shadow-brand-blue/5 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-brand group"
+          className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 hover:shadow-md transition-all active:scale-[0.98]"
         >
-          <div className="p-2 rounded-xl bg-slate-100 group-hover:scale-110 transition-transform text-slate-600">
-            <RefreshCw className="h-4 w-4" />
-          </div>
-          <span>Update Progress</span>
+          <Users className="h-4 w-4" />
+          View Applicants
+        </button>
+
+        <button
+          onClick={() => navigate( isAdmin ? '/activity-logs' : '/applicants' )}
+          className="flex items-center justify-center gap-2 p-3.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 hover:shadow-md transition-all active:scale-[0.98]"
+        >
+          <Bell className="h-4 w-4" />
+          {isAdmin ? 'Activity Logs' : 'Dashboard'}
         </button>
       </div>
 

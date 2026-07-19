@@ -153,7 +153,7 @@ const DashboardLayout = () => {
                 <UserIcon size={18} />
               </div>
               <div className="flex flex-col min-w-0 text-left">
-                <span className="text-sm font-semibold truncate text-white">{user?.name || 'Advisor'}</span>
+                <span className="text-sm font-semibold truncate text-white">{user?.name || 'Employee'}</span>
                 <span className="text-[10px] text-brand-orange uppercase font-bold tracking-wider leading-none mt-0.5">{user?.role}</span>
               </div>
             </div>

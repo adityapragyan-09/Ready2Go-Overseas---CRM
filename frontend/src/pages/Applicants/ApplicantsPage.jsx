@@ -497,9 +497,9 @@ export const ApplicantsPage = () => {
                     </div>
                   </Card>
 
-                  <Card title="Advisor Notes" subtitle="Internal dossier remarks">
+                  <Card title="Staff Notes" subtitle="Internal notes">
                     <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-sm text-slate-600 leading-relaxed font-medium">
-                      {selectedApplicant.notes || 'No counselor notes submitted for this file.'}
+                      {selectedApplicant.notes || 'No notes submitted for this file.'}
                     </div>
                   </Card>
                 </div>
@@ -609,7 +609,7 @@ export const ApplicantsPage = () => {
                   <div className="relative border-l-2 border-slate-100 pl-6 ml-3 space-y-6 text-left py-2">
                     <div className="relative">
                       <div className="absolute -left-[31px] top-1.5 w-2 h-2 rounded-full bg-brand-orange ring-4 ring-orange-50"></div>
-                      <p className="text-xs font-bold text-slate-700">Counselor Assigned</p>
+                      <p className="text-xs font-bold text-slate-700">Employee Assigned</p>
                       <p className="text-[10px] text-slate-400 font-medium mt-0.5">Yesterday &bull; by System</p>
                       <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                         File status set to Documents Pending and counselor assigned to employee.

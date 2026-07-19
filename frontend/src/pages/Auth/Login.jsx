@@ -72,7 +72,7 @@ const Login = () => {
           toast.error(
             portalRole === 'admin' 
               ? 'Authorized Administrator credentials required for this portal.' 
-              : 'Authorized Staff/Counselor credentials required for this portal.'
+              : 'Authorized Employee credentials required for this portal.'
           );
           return;
         }
@@ -92,7 +92,7 @@ const Login = () => {
       {/* Heading */}
       <div className="text-left">
         <h2 className="text-2xl font-extrabold text-slate-800 font-display">
-          {portalRole === 'admin' ? 'Administrator Portal' : 'Counselor Registry'}
+          {portalRole === 'admin' ? 'Administrator Portal' : 'Employee Portal'}
         </h2>
         <p className="text-sm text-slate-400 mt-1">
           {portalRole === 'admin' 

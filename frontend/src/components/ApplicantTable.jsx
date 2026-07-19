@@ -114,7 +114,7 @@ export const ApplicantTable = ({
                         {(getEmployeeName(applicant.assigned_to) || 'NA').substring(0, 2).toUpperCase()}
                       </div>
                       <span className="font-semibold text-slate-700 text-xs">
-                        {getEmployeeName(applicant.assigned_to) || 'Advisor'}
+                        {getEmployeeName(applicant.assigned_to) || 'Employee'}
                       </span>
                     </div>
                   ) : (
