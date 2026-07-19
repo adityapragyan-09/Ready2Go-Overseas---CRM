@@ -22,12 +22,45 @@ from app.schemas.employee import (
     EmployeeStatusUpdate,
     EmployeeUpdate,
 )
+import logging
 from datetime import datetime, timezone
+
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.models.applicant import Applicant
 from app.services import employee_service
 from app.services.auth_service import reset_employee_password
 from app.utils.response import error_response, success_response
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_employee_out(user) -> dict:
+    """Serialize an employee, gracefully handling deferred columns not yet migrated."""
+    try:
+        return _safe_employee_out(user)
+    except (OperationalError, ProgrammingError) as e:
+        logger.warning("Deferred column access failed for user %s: %s", user.id, e)
+        # Fallback: serialize without triggering deferred loads
+        data = {
+            "id": user.id,
+            "employee_code": getattr(user, "employee_code", None),
+            "full_name": getattr(user, "name", ""),
+            "email": getattr(user, "email", ""),
+            "phone": getattr(user, "phone", None),
+            "role": getattr(user, "role", "employee"),
+            "designation": getattr(user, "designation", None),
+            "department": getattr(user, "department", None),
+            "profile_photo": getattr(user, "profile_photo", None),
+            "is_active": getattr(user, "is_active", True),
+            "archived_at": None,
+            "last_login": getattr(user, "last_login", None),
+            "last_logout": getattr(user, "last_logout", None),
+            "created_at": getattr(user, "created_at", None),
+            "updated_at": getattr(user, "updated_at", None),
+            "created_by": getattr(user, "created_by", None),
+        }
+        return data
 
 router = APIRouter()
 
@@ -42,7 +75,7 @@ def get_own_profile(
     Retrieve own profile information.
     Accessible to all authenticated employees and admins.
     """
-    data = EmployeeOut.model_validate(current_user).model_dump(by_alias=True)
+    data = _safe_employee_out(current_user)
     return success_response(
         message="Profile retrieved successfully.",
         data=data,
@@ -62,7 +95,7 @@ def update_own_profile(
     Accessible to all authenticated employees and admins.
     """
     updated_user = employee_service.update_own_profile(db, current_user.id, body)
-    data = EmployeeOut.model_validate(updated_user).model_dump(by_alias=True)
+    data = _safe_employee_out(updated_user)
     return success_response(
         message="Profile updated successfully.",
         data=data,
@@ -96,7 +129,7 @@ def list_employees_route(
         page_size=page_size,
     )
     
-    serialized_items = [EmployeeOut.model_validate(u).model_dump(by_alias=True) for u in items]
+    serialized_items = [_safe_employee_out(u) for u in items]
     data = EmployeeListResponse(
         total_count=total,
         page=page,
@@ -123,7 +156,7 @@ def create_employee_route(
     Access restricted to administrators.
     """
     new_emp = employee_service.create_employee(db, body, created_by=admin.id)
-    data = EmployeeOut.model_validate(new_emp).model_dump(by_alias=True)
+    data = _safe_employee_out(new_emp)
     return success_response(
         message="Employee account registered successfully.",
         data=data,
@@ -143,7 +176,7 @@ def get_employee_route(
     Access restricted to administrators.
     """
     emp = employee_service.get_employee_by_id(db, id)
-    data = EmployeeOut.model_validate(emp).model_dump(by_alias=True)
+    data = _safe_employee_out(emp)
     return success_response(
         message="Employee retrieved successfully.",
         data=data,
@@ -164,7 +197,7 @@ def update_employee_route(
     Access restricted to administrators.
     """
     updated_emp = employee_service.update_employee(db, id, body)
-    data = EmployeeOut.model_validate(updated_emp).model_dump(by_alias=True)
+    data = _safe_employee_out(updated_emp)
     return success_response(
         message="Employee updated successfully.",
         data=data,
@@ -185,7 +218,7 @@ def update_employee_status_route(
     Access restricted to administrators.
     """
     updated_emp = employee_service.update_employee_status(db, id, is_active=body.is_active, action_by=admin.id)
-    data = EmployeeOut.model_validate(updated_emp).model_dump(by_alias=True)
+    data = _safe_employee_out(updated_emp)
     return success_response(
         message="Employee status updated successfully.",
         data=data,
@@ -206,7 +239,7 @@ def reset_employee_password_route(
     Access restricted to administrators.
     """
     updated_emp = reset_employee_password(db, employee_id=id, new_password=body.password)
-    data = EmployeeOut.model_validate(updated_emp).model_dump(by_alias=True)
+    data = _safe_employee_out(updated_emp)
     return success_response(
         message="Employee password reset successfully.",
         data=data,
@@ -240,7 +273,7 @@ def archive_employee_route(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to archive employee.")
 
-    data = EmployeeOut.model_validate(user).model_dump(by_alias=True)
+    data = _safe_employee_out(user)
     return success_response(message="Employee archived successfully.", data=data)
 
 
@@ -269,7 +302,7 @@ def unarchive_employee_route(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unarchive employee.")
 
-    data = EmployeeOut.model_validate(user).model_dump(by_alias=True)
+    data = _safe_employee_out(user)
     return success_response(message="Employee unarchived and reactivated successfully.", data=data)
 
 
