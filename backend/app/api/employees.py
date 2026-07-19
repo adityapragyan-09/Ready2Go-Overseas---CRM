@@ -130,12 +130,12 @@ def list_employees_route(
     )
     
     serialized_items = [_safe_employee_out(u) for u in items]
-    data = EmployeeListResponse(
-        total_count=total,
-        page=page,
-        page_size=page_size or 10,  # Central default representation
-        items=serialized_items,
-    ).model_dump(by_alias=True)
+    data = {
+        "total_count": total,
+        "page": page,
+        "page_size": page_size or 10,
+        "items": serialized_items,
+    }
 
     return success_response(
         message="Employees retrieved successfully.",
