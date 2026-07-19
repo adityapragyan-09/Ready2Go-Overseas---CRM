@@ -7,7 +7,7 @@ Access Level:
     - All other endpoints: Administrators only (require_admin dependency)
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_admin
@@ -22,9 +22,12 @@ from app.schemas.employee import (
     EmployeeStatusUpdate,
     EmployeeUpdate,
 )
+from datetime import datetime, timezone
+
+from app.models.applicant import Applicant
 from app.services import employee_service
 from app.services.auth_service import reset_employee_password
-from app.utils.response import success_response
+from app.utils.response import error_response, success_response
 
 router = APIRouter()
 
@@ -207,4 +210,147 @@ def reset_employee_password_route(
     return success_response(
         message="Employee password reset successfully.",
         data=data,
+    )
+
+
+# ── PATCH /{id}/archive ──────────────────────────
+
+@router.patch("/{id}/archive")
+def archive_employee_route(
+    id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Archive an employee. Archived employees cannot login or be assigned.
+    Access restricted to administrators.
+    """
+    user = db.query(User).filter(User.id == id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
+    if user.id == admin.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot archive your own account.")
+
+    user.is_active = False
+    user.archived_at = datetime.now(timezone.utc)
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to archive employee.")
+
+    data = EmployeeOut.model_validate(user).model_dump(by_alias=True)
+    return success_response(message="Employee archived successfully.", data=data)
+
+
+# ── PATCH /{id}/unarchive ────────────────────────
+
+@router.patch("/{id}/unarchive")
+def unarchive_employee_route(
+    id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Unarchive an employee and restore active status.
+    Access restricted to administrators.
+    """
+    user = db.query(User).filter(User.id == id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
+
+    user.is_active = True
+    user.archived_at = None
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unarchive employee.")
+
+    data = EmployeeOut.model_validate(user).model_dump(by_alias=True)
+    return success_response(message="Employee unarchived and reactivated successfully.", data=data)
+
+
+# ── DELETE /{id} ────────────────────────────────
+
+@router.delete("/{id}")
+def delete_employee_route(
+    id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Permanently delete an employee.
+    Only allowed if the employee has no assigned applicants.
+    Access restricted to administrators.
+    """
+    user = db.query(User).filter(User.id == id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
+    if user.id == admin.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account.")
+
+    assigned_count = db.query(Applicant).filter(Applicant.assigned_to == id, Applicant.is_deleted == False).count()
+    if assigned_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"This employee currently has {assigned_count} assigned applicant(s). Transfer them before deleting.",
+        )
+
+    name = user.name
+    try:
+        db.delete(user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete employee.")
+
+    return success_response(message=f"Employee '{name}' deleted permanently.")
+
+
+# ── POST /{id}/transfer-applicants ──────────────
+
+@router.post("/{id}/transfer-applicants")
+def transfer_applicants_route(
+    id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Transfer all applicants from one employee to another.
+    Access restricted to administrators.
+    """
+    from pydantic import BaseModel
+
+    class TransferSchema(BaseModel):
+        target_employee_id: int
+
+    transfer = TransferSchema(**body)
+
+    source_user = db.query(User).filter(User.id == id).first()
+    if not source_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source employee not found.")
+
+    target_user = db.query(User).filter(User.id == transfer.target_employee_id).first()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target employee not found.")
+
+    applicants = db.query(Applicant).filter(Applicant.assigned_to == id, Applicant.is_deleted == False).all()
+    count = len(applicants)
+
+    for app in applicants:
+        app.assigned_to = transfer.target_employee_id
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to transfer applicants.")
+
+    return success_response(
+        message=f"Successfully transferred {count} applicant(s) to '{target_user.name}'.",
+        data={"transferred_count": count, "target_employee": target_user.name},
     )
