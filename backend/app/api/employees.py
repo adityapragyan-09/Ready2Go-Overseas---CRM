@@ -39,8 +39,8 @@ def _safe_employee_out(user) -> dict:
     """Serialize an employee, gracefully handling deferred columns not yet migrated."""
     try:
         return EmployeeOut.model_validate(user).model_dump(by_alias=True)
-    except (OperationalError, ProgrammingError) as e:
-        logger.warning("Deferred column access failed for user %s: %s", user.id, e)
+    except Exception as e:
+        logger.warning("Employee serialization failed for user %s: %s", user.id, e)
         # Fallback: serialize without triggering deferred loads
         data = {
             "id": user.id,
