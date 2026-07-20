@@ -496,6 +496,9 @@ export const EmployeeManagement = () => {
   const [activeEmployee, setActiveEmployee] = useState(null);
   const [detailsEmployee, setDetailsEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [transferTarget, setTransferTarget] = useState(null);
+  const [transferEmployeeId, setTransferEmployeeId] = useState('');
 
   // Deep-link: detect ?view=add from URL (used by Dashboard quick action)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -602,6 +605,84 @@ export const EmployeeManagement = () => {
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to reset password.');
+    }
+  };
+
+  const handleArchiveEmployee = async (emp) => {
+    if (!window.confirm(`Archive employee "${emp.full_name}"? They will no longer be able to login or be assigned new applicants.`)) return;
+    try {
+      const res = await api.patch(`/employees/${emp.id}/archive`);
+      if (res.data && res.data.success) {
+        toast.success(`"${emp.full_name}" archived successfully.`);
+        fetchEmployees();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to archive employee.');
+    }
+  };
+
+  const handleRestoreEmployee = async (emp) => {
+    if (!window.confirm(`Restore employee "${emp.full_name}"? They will be reactivated.`)) return;
+    try {
+      const res = await api.patch(`/employees/${emp.id}/unarchive`);
+      if (res.data && res.data.success) {
+        toast.success(`"${emp.full_name}" restored successfully.`);
+        fetchEmployees();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to restore employee.');
+    }
+  };
+
+  const handleDeleteEmployee = async (emp) => {
+    setDeleteTarget(emp);
+    // Check if employee has assigned applicants
+    try {
+      const res = await api.get(`/applicants?assigned_to=${emp.id}&page_size=1`);
+      const assignedCount = res.data?.data?.total || 0;
+      if (assignedCount > 0) {
+        // Need transfer first
+        setTransferTarget(emp);
+        setTransferEmployeeId('');
+      } else {
+        // Safe to delete directly
+        if (window.confirm(`Permanently delete employee "${emp.full_name}"? This action cannot be undone.`)) {
+          const delRes = await api.delete(`/employees/${emp.id}`);
+          if (delRes.data && delRes.data.success) {
+            toast.success(`"${emp.full_name}" deleted permanently.`);
+            setDeleteTarget(null);
+            fetchEmployees();
+          }
+        }
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to check employee assignments.');
+    }
+  };
+
+  const handleTransferAndDelete = async () => {
+    if (!transferTarget || !transferEmployeeId) {
+      toast.error('Please select a replacement employee.');
+      return;
+    }
+    try {
+      // Transfer applicants
+      const transferRes = await api.post(`/employees/${transferTarget.id}/transfer-applicants`, {
+        target_employee_id: Number(transferEmployeeId)
+      });
+      if (transferRes.data && transferRes.data.success) {
+        // Delete the employee
+        const delRes = await api.delete(`/employees/${transferTarget.id}`);
+        if (delRes.data && delRes.data.success) {
+          toast.success(`Applicants transferred and "${transferTarget.full_name}" deleted permanently.`);
+          setTransferTarget(null);
+          setTransferEmployeeId('');
+          setDeleteTarget(null);
+          fetchEmployees();
+        }
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to transfer and delete.');
     }
   };
 
@@ -812,32 +893,48 @@ export const EmployeeManagement = () => {
                           <EmployeeStatusBadge isActive={emp.is_active} />
                         </td>
                         <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {/* View */}
+                            <button
+                              onClick={() => setDetailsEmployee(emp)}
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all"
+                            >
+                              View
+                            </button>
+
+                            {/* Edit */}
                             <button
                               onClick={() => { setActiveEmployee(emp); setSearchParams({ view: 'edit', id: emp.id }); }}
-                              className="p-1.5 text-slate-400 hover:text-brand-orange hover:bg-brand-orange/5 rounded-lg transition-all"
-                              title="Edit Employee"
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 transition-all"
                             >
-                              <Eye size={13} />
+                              Edit
                             </button>
+
+                            {/* Archive / Restore */}
+                            {emp.is_active ? (
+                              <button
+                                onClick={() => handleArchiveEmployee(emp)}
+                                disabled={emp.id === user?.id}
+                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100 transition-all disabled:opacity-40"
+                              >
+                                Archive
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleRestoreEmployee(emp)}
+                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-all"
+                              >
+                                Restore
+                              </button>
+                            )}
+
+                            {/* Delete */}
                             <button
-                              onClick={() => handlePasswordReset(emp)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                              title="Reset Password"
-                            >
-                              <Lock size={13} />
-                            </button>
-                            <button
-                              onClick={() => handleStatusToggle(emp)}
+                              onClick={() => handleDeleteEmployee(emp)}
                               disabled={emp.id === user?.id}
-                              className={`p-1.5 rounded-lg transition-all ${
-                                emp.is_active 
-                                  ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' 
-                                  : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
-                              } disabled:opacity-30`}
-                              title={emp.is_active ? 'Deactivate Account' : 'Activate Account'}
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-all disabled:opacity-40"
                             >
-                              {emp.is_active ? <UserX size={13} /> : <UserCheck size={13} />}
+                              Delete
                             </button>
                           </div>
                         </td>
@@ -861,6 +958,47 @@ export const EmployeeManagement = () => {
           employee={detailsEmployee}
           onClose={() => setDetailsEmployee(null)}
         />
+      )}
+
+      {/* Transfer & Delete Modal */}
+      {transferTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div onClick={() => { setTransferTarget(null); setDeleteTarget(null); }} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 text-left z-10">
+            <h3 className="text-sm font-bold text-slate-800">Transfer Applicants & Delete Employee</h3>
+            <p className="text-xs text-slate-500 mt-2">
+              This employee has assigned applicants. Select a replacement employee to transfer them to before deletion.
+            </p>
+            <div className="mt-4">
+              <label className="text-xs font-bold text-slate-600 block mb-1.5">Transfer to:</label>
+              <select
+                value={transferEmployeeId}
+                onChange={(e) => setTransferEmployeeId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-brand-orange"
+              >
+                <option value="">Select employee...</option>
+                {employees
+                  .filter(e => e.id !== transferTarget.id && e.is_active)
+                  .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
+                  .map(e => (
+                    <option key={e.id} value={e.id}>{e.full_name}</option>
+                  ))
+                }
+              </select>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => { setTransferTarget(null); setDeleteTarget(null); }}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all">
+                Cancel
+              </button>
+              <button onClick={handleTransferAndDelete}
+                disabled={!transferEmployeeId}
+                className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all disabled:opacity-50">
+                Transfer & Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
