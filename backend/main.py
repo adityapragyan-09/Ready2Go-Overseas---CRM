@@ -11,6 +11,7 @@ Production:
     gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
 """
 
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -45,6 +46,41 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
     redirect_slashes=False,
 )
+
+
+# ── Startup: Auto-run database migrations ───────
+
+@app.on_event("startup")
+def run_database_migrations():
+    """Execute Alembic migrations before the first request is handled.
+
+    This ensures the database schema is always synchronized with the
+    SQLAlchemy models, regardless of whether Render uses Docker (where
+    startup.sh handles this) or Native Python runtime (where Render
+    controls the start command directly).
+
+    The subprocess runs 'alembic upgrade head' which applies ALL pending
+    migrations in order. If the migration fails, the application logs the
+    error but still starts — this allows the health check to report the
+    database status via /ready.
+    """
+    try:
+        logger.info("Running database migrations...")
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        logger.info("Migration stdout: %s", result.stdout.strip() if result.stdout else "(none)")
+        if result.returncode != 0:
+            logger.error("Migration stderr: %s", result.stderr.strip() if result.stderr else "(none)")
+            logger.error("Migration failed with exit code %d", result.returncode)
+        else:
+            logger.info("Database migrations completed successfully.")
+    except Exception as exc:
+        logger.error("Migration command failed to execute: %s", exc)
+
 
 # ── Request ID Middleware ───────────────────────
 
