@@ -62,7 +62,6 @@ def run_database_migrations():
     RuntimeError, which prevents the server from starting. This ensures
     the application NEVER runs with an outdated database schema.
     """
-    import sys
     logger.info("Running database migrations...")
     result = subprocess.run(
         ["alembic", "upgrade", "head"],
@@ -78,10 +77,11 @@ def run_database_migrations():
         for line in (result.stderr or "").strip().split("\n"):
             if line.strip():
                 logger.error("Migration error: %s", line.strip())
-        # Hard fail — never start with outdated schema
-        sys.stderr.write("FATAL: Database migration failed. Server will not start.\n")
-        sys.stderr.write(result.stderr or "")
-        sys.exit(1)
+        raise RuntimeError(
+            f"Alembic migration failed (exit {result.returncode}). "
+            "Server startup aborted to prevent schema mismatch. "
+            "Fix the migration and redeploy."
+        )
     logger.info("Database migrations completed successfully.")
 
 
