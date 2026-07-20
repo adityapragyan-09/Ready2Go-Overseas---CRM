@@ -7,6 +7,7 @@ import {
 import toast from 'react-hot-toast';
 import documentService from '../services/documentService';
 import StatusBadge from './StatusBadge';
+import ConfirmationModal from './ConfirmationModal';
 
 // Config maps document_type to icons and style classes
 const typeConfig = {
@@ -35,6 +36,7 @@ const formatFileSize = (bytes) => {
 };
 
 export const DocumentGrid = ({ documents = [], employees = [], onDeleteSuccess }) => {
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [uploaderFilter, setUploaderFilter] = useState('');
@@ -106,10 +108,13 @@ export const DocumentGrid = ({ documents = [], employees = [], onDeleteSuccess }
   };
 
   const handleDelete = async (doc) => {
-    if (!window.confirm(`Are you sure you want to delete "${doc.original_file_name}"? This will archive the file.`)) {
-      return;
-    }
+    setConfirmDeleteDoc(doc);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteDoc) return;
+    const doc = confirmDeleteDoc;
+    setConfirmDeleteDoc(null);
     try {
       await documentService.delete(doc.id);
       toast.success('Document archived successfully!');
@@ -384,7 +389,17 @@ export const DocumentGrid = ({ documents = [], employees = [], onDeleteSuccess }
           </div>
         </div>
       )}
-      
+
+      <ConfirmationModal
+        visible={!!confirmDeleteDoc}
+        title="Delete Document"
+        message={confirmDeleteDoc ? `Are you sure you want to delete "${confirmDeleteDoc.original_file_name}"?` : ''}
+        warning="The document will be archived and no longer accessible."
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDeleteDoc(null)}
+      />
     </div>
   );
 };

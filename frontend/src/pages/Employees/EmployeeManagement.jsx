@@ -14,6 +14,7 @@ import Button from '../../components/Button';
 import Input from '../../components/Input';
 import PageHeader from '../../components/PageHeader';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import ConfirmationModal from '../../components/ConfirmationModal';
 
 // ── 1. Status Badge Component ────────────────────
 export const EmployeeStatusBadge = ({ isActive }) => {
@@ -499,6 +500,8 @@ export const EmployeeManagement = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [transferTarget, setTransferTarget] = useState(null);
   const [transferEmployeeId, setTransferEmployeeId] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   // Deep-link: detect ?view=add from URL (used by Dashboard quick action)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -573,18 +576,15 @@ export const EmployeeManagement = () => {
       return;
     }
     const nextStatus = !emp.is_active;
-    const confirmMsg = `Are you sure you want to ${nextStatus ? 'activate' : 'deactivate'} employee account "${emp.full_name}"?`;
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-      const res = await api.patch(`/employees/${emp.id}/status`, { is_active: nextStatus });
-      if (res.data && res.data.success) {
-        toast.success(`Account for "${emp.full_name}" updated.`);
-        fetchEmployees();
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to update employee status.');
-    }
+    setConfirmAction({
+      title: nextStatus ? 'Activate Employee' : 'Deactivate Employee',
+      message: `Are you sure you want to ${nextStatus ? 'activate' : 'deactivate'} "${emp.full_name}"?`,
+      confirmText: nextStatus ? 'Activate' : 'Deactivate',
+      confirmVariant: nextStatus ? 'primary' : 'warning',
+      employee: emp,
+      action: 'status',
+      payload: { is_active: nextStatus },
+    });
   };
 
   const handlePasswordReset = async (emp) => {
@@ -608,55 +608,80 @@ export const EmployeeManagement = () => {
     }
   };
 
-  const handleArchiveEmployee = async (emp) => {
-    if (!window.confirm(`Archive employee "${emp.full_name}"? They will no longer be able to login or be assigned new applicants.`)) return;
-    try {
-      const res = await api.patch(`/employees/${emp.id}/archive`);
-      if (res.data && res.data.success) {
-        toast.success(`"${emp.full_name}" archived successfully.`);
-        fetchEmployees();
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to archive employee.');
-    }
+  const handleArchiveEmployee = (emp) => {
+    setConfirmAction({
+      title: 'Archive Employee',
+      message: `Are you sure you want to archive "${emp.full_name}"?`,
+      warning: 'Archived employees cannot login or be assigned new applicants.',
+      confirmText: 'Archive',
+      confirmVariant: 'warning',
+      employee: emp,
+      action: 'archive',
+    });
   };
 
-  const handleRestoreEmployee = async (emp) => {
-    if (!window.confirm(`Restore employee "${emp.full_name}"? They will be reactivated.`)) return;
-    try {
-      const res = await api.patch(`/employees/${emp.id}/unarchive`);
-      if (res.data && res.data.success) {
-        toast.success(`"${emp.full_name}" restored successfully.`);
-        fetchEmployees();
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to restore employee.');
-    }
+  const handleRestoreEmployee = (emp) => {
+    setConfirmAction({
+      title: 'Restore Employee',
+      message: `Are you sure you want to restore "${emp.full_name}"? They will be reactivated.`,
+      confirmText: 'Restore',
+      confirmVariant: 'primary',
+      employee: emp,
+      action: 'restore',
+    });
   };
 
   const handleDeleteEmployee = async (emp) => {
     setDeleteTarget(emp);
-    // Check if employee has assigned applicants
     try {
       const res = await api.get(`/applicants?assigned_to=${emp.id}&page_size=1`);
       const assignedCount = res.data?.data?.total || 0;
       if (assignedCount > 0) {
-        // Need transfer first
         setTransferTarget(emp);
         setTransferEmployeeId('');
       } else {
-        // Safe to delete directly
-        if (window.confirm(`Permanently delete employee "${emp.full_name}"? This action cannot be undone.`)) {
-          const delRes = await api.delete(`/employees/${emp.id}`);
-          if (delRes.data && delRes.data.success) {
-            toast.success(`"${emp.full_name}" deleted permanently.`);
-            setDeleteTarget(null);
-            fetchEmployees();
-          }
-        }
+        setConfirmAction({
+          title: 'Delete Employee',
+          message: `Are you sure you want to permanently delete "${emp.full_name}"?`,
+          warning: 'This action cannot be undone. The employee record will be permanently removed.',
+          confirmText: 'Delete',
+          confirmVariant: 'danger',
+          employee: emp,
+          action: 'delete',
+        });
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to check employee assignments.');
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    setConfirmLoading(true);
+    const emp = confirmAction.employee;
+    try {
+      if (confirmAction.action === 'archive') {
+        const res = await api.patch(`/employees/${emp.id}/archive`);
+        if (res.data?.success) toast.success(`"${emp.full_name}" archived.`);
+      } else if (confirmAction.action === 'restore') {
+        const res = await api.patch(`/employees/${emp.id}/unarchive`);
+        if (res.data?.success) toast.success(`"${emp.full_name}" restored.`);
+      } else if (confirmAction.action === 'delete') {
+        const res = await api.delete(`/employees/${emp.id}`);
+        if (res.data?.success) {
+          toast.success(`"${emp.full_name}" deleted permanently.`);
+          setDeleteTarget(null);
+        }
+      } else if (confirmAction.action === 'status') {
+        const res = await api.patch(`/employees/${emp.id}/status`, confirmAction.payload);
+        if (res.data?.success) toast.success(`"${emp.full_name}" status updated.`);
+      }
+      setConfirmAction(null);
+      fetchEmployees();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || `Failed to ${confirmAction.action} employee.`);
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -1000,6 +1025,19 @@ export const EmployeeManagement = () => {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        visible={!!confirmAction}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+        warning={confirmAction?.warning}
+        confirmText={confirmAction?.confirmText || 'Confirm'}
+        confirmVariant={confirmAction?.confirmVariant || 'danger'}
+        loading={confirmLoading}
+        onConfirm={handleConfirmAction}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 };

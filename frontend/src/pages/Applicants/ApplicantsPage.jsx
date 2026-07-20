@@ -21,6 +21,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 
 // UI Components
 import Card from '../../components/Card';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import Button from '../../components/Button';
 import PageHeader from '../../components/PageHeader';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -65,6 +66,7 @@ export const ApplicantsPage = () => {
   const [applicants, setApplicants] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [total, setTotal] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(appConfig.DEFAULT_PAGE_SIZE);
   const [totalPages, setTotalPages] = useState(1);
@@ -243,12 +245,15 @@ export const ApplicantsPage = () => {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete applicant "${name}"? This will archive their file record in the database.`)) {
-      return;
-    }
+    setConfirmDelete({ id, name });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return;
     try {
-      await applicantService.delete(id);
-      toast.success(`Applicant "${name}" deleted successfully.`);
+      await applicantService.delete(confirmDelete.id);
+      toast.success(`Applicant "${confirmDelete.name}" deleted successfully.`);
+      setConfirmDelete(null);
       if (view === 'details') {
         navigate('/applicants');
       } else {
@@ -712,6 +717,17 @@ export const ApplicantsPage = () => {
           />
         )}
       </Card>
+
+      <ConfirmationModal
+        visible={!!confirmDelete}
+        title="Delete Applicant"
+        message={confirmDelete ? `Are you sure you want to permanently delete "${confirmDelete.name}"?` : ''}
+        warning="This will permanently remove the applicant, all documents, progress history, chat messages, and related records. This action cannot be undone."
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 };
