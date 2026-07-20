@@ -40,6 +40,10 @@ RUN useradd --create-home --shell /bin/bash crm && \
     mkdir -p /app/uploads && \
     chown -R crm:crm /app
 
+# Make startup script executable
+COPY backend/startup.sh /app/startup.sh
+RUN chmod +x /app/startup.sh
+
 USER crm
 
 # Health check uses the PORT env var (Render provides $PORT)
@@ -48,5 +52,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 
 EXPOSE 8000
 
-# Render provides PORT env var; default to 8000 for local Docker use
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 4 --proxy-headers --forwarded-allow-ips "*"
+# Start command runs migrations then starts the server
+CMD ["/app/startup.sh"]
