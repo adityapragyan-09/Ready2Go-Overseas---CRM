@@ -60,6 +60,7 @@ class LeadInquiry(Base):
     # Relationships
     assigned_employee = relationship("User", foreign_keys=[assigned_employee_id])
     activities = relationship("LeadActivity", back_populates="lead", lazy="dynamic", order_by="LeadActivity.created_at.desc")
+    notes = relationship("LeadNote", back_populates="lead", lazy="dynamic", order_by="LeadNote.created_at.desc")
 
     # Composite indexes for common queries
     __table_args__ = (
