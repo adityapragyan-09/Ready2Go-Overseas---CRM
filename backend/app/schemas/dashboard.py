@@ -24,6 +24,10 @@ class DashboardSummaryResponse(BaseModel):
     inactive_employees: int
     todays_logins: int
     unread_notifications: int
+    total_leads: int = 0
+    new_leads: int = 0
+    todays_leads: int = 0
+    converted_leads: int = 0
 
 
 class KeyValueMetric(BaseModel):

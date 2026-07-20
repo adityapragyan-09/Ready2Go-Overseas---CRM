@@ -1,0 +1,41 @@
+"""
+Ready2Go CRM — Lead Inquiry Constants
+"""
+
+# ── Statuses ─────────────────────────────────
+NEW = "NEW"
+CONTACTED = "CONTACTED"
+FOLLOW_UP = "FOLLOW_UP"
+QUALIFIED = "QUALIFIED"
+CONVERTED = "CONVERTED"
+CLOSED = "CLOSED"
+
+ALL_STATUSES = (
+    NEW,
+    CONTACTED,
+    FOLLOW_UP,
+    QUALIFIED,
+    CONVERTED,
+    CLOSED,
+)
+
+# ── Sources ─────────────────────────────────
+WEBSITE = "WEBSITE"
+PHONE = "PHONE"
+WALK_IN = "WALK_IN"
+WHATSAPP = "WHATSAPP"
+REFERRAL = "REFERRAL"
+FACEBOOK = "FACEBOOK"
+INSTAGRAM = "INSTAGRAM"
+GOOGLE_ADS = "GOOGLE_ADS"
+
+ALL_SOURCES = (
+    WEBSITE,
+    PHONE,
+    WALK_IN,
+    WHATSAPP,
+    REFERRAL,
+    FACEBOOK,
+    INSTAGRAM,
+    GOOGLE_ADS,
+)

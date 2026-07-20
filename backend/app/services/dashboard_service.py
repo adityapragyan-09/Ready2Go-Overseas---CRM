@@ -15,6 +15,7 @@ from app.models.progress import ProgressHistory
 from app.models.message import Message
 from app.models.notification import Notification
 from app.models.activity_log import ActivityLog
+from app.models.lead_inquiry import LeadInquiry
 from app.services.notification_service import get_unread_count
 
 # Track application start time for system uptime
@@ -65,6 +66,12 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
     completed_statuses = ["completed", "approved", "visa_approved", "visa_issued"]
     completed_applications = sum(status_counts.get(status, 0) for status in completed_statuses)
 
+    # Batch 4: Lead statistics
+    total_leads = db.query(func.count(LeadInquiry.id)).scalar() or 0
+    new_leads = db.query(func.count(LeadInquiry.id)).filter(LeadInquiry.status == "NEW").scalar() or 0
+    todays_leads = db.query(func.count(LeadInquiry.id)).filter(LeadInquiry.created_at >= today_start).scalar() or 0
+    converted_leads = db.query(func.count(LeadInquiry.id)).filter(LeadInquiry.status == "CONVERTED").scalar() or 0
+
     is_admin = current_user.role == "admin"
     unread_notifs = get_unread_count(db, current_user.id, is_admin)
 
@@ -85,6 +92,10 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
         "inactive_employees": inactive_employees,
         "todays_logins": todays_logins,
         "unread_notifications": unread_notifs,
+        "total_leads": total_leads,
+        "new_leads": new_leads,
+        "todays_leads": todays_leads,
+        "converted_leads": converted_leads,
     }
 
 

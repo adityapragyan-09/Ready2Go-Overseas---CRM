@@ -15,7 +15,8 @@ import {
   User as UserIcon,
   Shield,
   Activity,
-  ChevronDown
+  ChevronDown,
+  PhoneCall
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NotificationBell from '../components/NotificationBell';
@@ -52,6 +53,7 @@ const DashboardLayout = () => {
     { label: 'Visit Visa', path: '/applicants?visa_type=visit', icon: Compass },
     { label: 'Tourist Visa', path: '/applicants?visa_type=tourist', icon: Plane },
     { label: 'Business Visa', path: '/applicants?visa_type=business', icon: Briefcase },
+    { label: 'Lead Inquiries', path: '/lead-inquiries', icon: PhoneCall },
   ];
 
   // Admin-only items

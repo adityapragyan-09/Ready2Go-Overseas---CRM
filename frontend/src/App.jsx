@@ -17,6 +17,7 @@ import NotFound from './pages/Errors/NotFound';
 import ServerError from './pages/Errors/ServerError';
 
 import { ActivityLogs } from './pages/ActivityLogs/ActivityLogs';
+import LeadInquiriesPage from './pages/LeadInquiries/LeadInquiriesPage';
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/applicants" element={<ApplicantsPage />} />
               <Route path="/employees" element={<EmployeeManagement />} />
+              <Route path="/lead-inquiries" element={<LeadInquiriesPage />} />
               <Route path="/activity-logs" element={<ProtectedRoute requireAdmin><ActivityLogs /></ProtectedRoute>} />
             </Route>
 

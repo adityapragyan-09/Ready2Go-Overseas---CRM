@@ -30,6 +30,7 @@ from app.api.chat import router as chat_router
 from app.api.notifications import router as notifications_router
 from app.api.dashboard import router as dashboard_router
 from app.api.activity_logs import router as activity_logs_router
+from app.api.lead_inquiries import router as lead_inquiries_router
 from app.core.config import settings
 from app.core.logging import logger
 from app.middlewares.cors import setup_cors
@@ -120,6 +121,7 @@ app.include_router(chat_router, prefix=f"{settings.API_PREFIX}/chat", tags=["Cha
 app.include_router(notifications_router, prefix=f"{settings.API_PREFIX}/notifications", tags=["Notifications"])
 app.include_router(dashboard_router, prefix=f"{settings.API_PREFIX}/dashboard", tags=["Dashboard"])
 app.include_router(activity_logs_router, prefix=f"{settings.API_PREFIX}/activity-logs", tags=["Activity Logs"])
+app.include_router(lead_inquiries_router, prefix=f"{settings.API_PREFIX}/lead-inquiries", tags=["Lead Inquiries"])
 
 # ── Health / Liveness / Readiness ────────────────
 
