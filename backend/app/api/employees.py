@@ -468,10 +468,13 @@ def cleanup_employee_route(
     if refs["activity_logs"] > 0:
         deleted["activity_logs"] = db.query(ActivityLog).filter(ActivityLog.user_id == id).delete()
 
-    # Step 2: Nullify all SET NULL foreign keys
+    # Step 2: Reassign NOT NULL foreign keys to the admin performing cleanup
+    if refs["applicants_created"] > 0:
+        db.query(Applicant).filter(Applicant.created_by == id).update({"created_by": admin.id})
+        deleted["applicants_reassigned"] = refs["applicants_created"]
+    # Nullify nullable FKs
     db.query(Notification).filter(Notification.created_by == id).update({"created_by": None})
     db.query(Notification).filter(Notification.recipient_user_id == id).update({"recipient_user_id": None})
-    db.query(Applicant).filter(Applicant.created_by == id).update({"created_by": None})
     db.query(Applicant).filter(Applicant.assigned_to == id).update({"assigned_to": None})
     db.query(Applicant).filter(Applicant.deleted_by == id).update({"deleted_by": None})
     db.query(Document).filter(Document.deleted_by == id).update({"deleted_by": None})
