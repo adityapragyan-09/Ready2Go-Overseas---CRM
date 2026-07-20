@@ -464,39 +464,27 @@ def cleanup_employee_route(
     # Force mode: SAFELY remove the employee by clearing all FK references first
     deleted = {}
 
-    # Step 1: Nullify all SET NULL foreign keys
-    db.query(ActivityLog).filter(ActivityLog.user_id == id).update({"user_id": None})
-    deleted["activity_logs_nullified"] = refs["activity_logs"]
+    # Step 1: Delete activity_logs (may be NOT NULL if migration pending)
+    if refs["activity_logs"] > 0:
+        deleted["activity_logs"] = db.query(ActivityLog).filter(ActivityLog.user_id == id).delete()
 
+    # Step 2: Nullify all SET NULL foreign keys
     db.query(Notification).filter(Notification.created_by == id).update({"created_by": None})
-    deleted["notifications_created_nullified"] = refs["notifications_created"]
-
     db.query(Notification).filter(Notification.recipient_user_id == id).update({"recipient_user_id": None})
-    deleted["notifications_received_nullified"] = refs["notifications_received"]
-
     db.query(Applicant).filter(Applicant.created_by == id).update({"created_by": None})
-    deleted["applicants_created_nullified"] = refs["applicants_created"]
-
     db.query(Applicant).filter(Applicant.assigned_to == id).update({"assigned_to": None})
-    deleted["applicants_assigned_nullified"] = refs["applicants_assigned"]
-
     db.query(Applicant).filter(Applicant.deleted_by == id).update({"deleted_by": None})
-    deleted["applicants_deleted_nullified"] = refs["applicants_deleted"]
-
     db.query(Document).filter(Document.deleted_by == id).update({"deleted_by": None})
-    deleted["documents_deleted_nullified"] = refs["documents_deleted"]
 
-    # Step 2: Delete RESTRICT FK rows
+    # Step 3: Delete RESTRICT FK rows
     if refs["documents_uploaded"] > 0:
         deleted["documents_uploaded"] = db.query(Document).filter(Document.uploaded_by == id).delete()
-
     if refs["messages_sent"] > 0:
         deleted["messages_sent"] = db.query(Message).filter(Message.sender_id == id).delete()
-
     if refs["progress_updates"] > 0:
         deleted["progress_updates"] = db.query(ProgressHistory).filter(ProgressHistory.updated_by == id).delete()
 
-    # Step 3: Delete the employee
+    # Step 4: Delete the employee
     name = user.name
     db.delete(user)
 
