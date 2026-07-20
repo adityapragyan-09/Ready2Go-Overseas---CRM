@@ -359,8 +359,18 @@ def delete_employee_route(
     if assigned_count > 0:
         blockers.append(f"applicants (assigned_to): {assigned_count} active applicants")
 
+    # Check activity_logs and notifications (SET NULL/CASCADE — informational)
+    from app.models.activity_log import ActivityLog
+    from app.models.notification import Notification
+    log_count = db.query(ActivityLog.id).filter(ActivityLog.user_id == id).count()
+    notif_created = db.query(Notification.id).filter(Notification.created_by == id).count()
+    notif_received = db.query(Notification.id).filter(Notification.recipient_user_id == id).count()
+
     if blockers:
-        detail = "Employee cannot be deleted. The following references exist:\n" + "\n".join(f"  - {b}" for b in blockers)
+        detail = (
+            "Employee cannot be deleted. The following references exist:\n"
+            + "\n".join(f"  - {b}" for b in blockers)
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=detail,
@@ -369,11 +379,15 @@ def delete_employee_route(
     try:
         db.delete(user)
         db.commit()
+        logger.info("Employee '%s' (ID %d) deleted. Referenced rows affected: activity_logs=%d notifications_created=%d notifications_received=%d",
+                     name, id, log_count, notif_created, notif_received)
     except Exception as exc:
         db.rollback()
+        # Capture the exact database error for debugging
+        logger.error("DELETE employee %d failed: %s", id, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete employee. Database error: {exc}",
+            detail=f"Employee cannot be deleted due to a database constraint: {exc}",
         )
 
     return success_response(message=f"Employee '{name}' deleted permanently.")
