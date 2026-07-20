@@ -672,6 +672,12 @@ export const EmployeeManagement = () => {
           toast.success(`"${emp.full_name}" deleted permanently.`);
           setDeleteTarget(null);
         }
+      } else if (confirmAction.action === 'cleanup') {
+        const res = await api.post(`/employees/${emp.id}/cleanup`, { force: true });
+        if (res.data?.success) {
+          toast.success(`Production cleanup complete: "${emp.full_name}" removed.`);
+          setDeleteTarget(null);
+        }
       } else if (confirmAction.action === 'status') {
         const res = await api.patch(`/employees/${emp.id}/status`, confirmAction.payload);
         if (res.data?.success) toast.success(`"${emp.full_name}" status updated.`);
@@ -679,7 +685,23 @@ export const EmployeeManagement = () => {
       setConfirmAction(null);
       fetchEmployees();
     } catch (err) {
-      toast.error(err.response?.data?.detail || `Failed to ${confirmAction.action} employee.`);
+      const errorDetail = err.response?.data?.detail || err.response?.data?.message || `Failed to ${confirmAction.action} employee.`;
+      // If delete failed due to FK constraints, offer cleanup option
+      if (confirmAction.action === 'delete' && err.response?.status !== 400) {
+        toast.error(errorDetail, { duration: 6000 });
+        // Show cleanup option
+        setConfirmAction({
+          title: 'Production Cleanup',
+          message: `"${emp.full_name}" has references in the database that prevent normal deletion.`,
+          warning: 'Use Force Cleanup to remove this development employee AND all associated records.',
+          confirmText: 'Force Delete Test Employee',
+          confirmVariant: 'danger',
+          employee: emp,
+          action: 'cleanup',
+        });
+      } else {
+        toast.error(errorDetail);
+      }
     } finally {
       setConfirmLoading(false);
     }

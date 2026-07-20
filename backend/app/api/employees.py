@@ -393,6 +393,131 @@ def delete_employee_route(
     return success_response(message=f"Employee '{name}' deleted permanently.")
 
 
+# ── POST /{id}/cleanup ──────────────────────────
+# ONE-TIME PRODUCTION CLEANUP UTILITY
+# Removed after initial production cleanup is complete.
+
+from app.models.activity_log import ActivityLog
+from app.models.document import Document
+from app.models.message import Message
+from app.models.notification import Notification
+from app.models.progress import ProgressHistory
+
+
+@router.post("/{id}/cleanup")
+def cleanup_employee_route(
+    id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    ONE-TIME Production Cleanup: Force-delete a development/test employee
+    and ALL references to them across all tables.
+
+    This is ONLY for removing development artifacts before production delivery.
+    This endpoint will be REMOVED after initial production cleanup.
+
+    Body: {"force": false} — scan only (returns summary)
+          {"force": true}  — scan + delete all references + delete employee
+    """
+    from pydantic import BaseModel
+
+    class CleanupSchema(BaseModel):
+        force: bool = False
+
+    cleanup = CleanupSchema(**body)
+
+    user = db.query(User).filter(User.id == id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
+    if user.id == admin.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot cleanup your own account.")
+
+    # Scan all referencing tables
+    refs = {
+        "applicants_created": db.query(Applicant).filter(Applicant.created_by == id).count(),
+        "applicants_assigned": db.query(Applicant).filter(Applicant.assigned_to == id).count(),
+        "applicants_deleted": db.query(Applicant).filter(Applicant.deleted_by == id).count(),
+        "documents_uploaded": db.query(Document).filter(Document.uploaded_by == id).count(),
+        "documents_deleted": db.query(Document).filter(Document.deleted_by == id).count(),
+        "messages_sent": db.query(Message).filter(Message.sender_id == id).count(),
+        "progress_updates": db.query(ProgressHistory).filter(ProgressHistory.updated_by == id).count(),
+        "notifications_created": db.query(Notification).filter(Notification.created_by == id).count(),
+        "notifications_received": db.query(Notification).filter(Notification.recipient_user_id == id).count(),
+        "activity_logs": db.query(ActivityLog).filter(ActivityLog.user_id == id).count(),
+    }
+    total_refs = sum(refs.values())
+
+    if not cleanup.force:
+        # Scan mode: return summary without deleting
+        return success_response(
+            message=f"Cleanup scan for '{user.name}': {total_refs} reference(s) found.",
+            data={
+                "employee_id": id,
+                "employee_name": user.name,
+                "total_references": total_refs,
+                "references": refs,
+            },
+        )
+
+    # Force mode: delete all references and the employee
+    deleted = {}
+
+    if refs["activity_logs"] > 0:
+        deleted["activity_logs"] = db.query(ActivityLog).filter(ActivityLog.user_id == id).delete()
+
+    if refs["notifications_created"] > 0:
+        deleted["notifications_created"] = db.query(Notification).filter(Notification.created_by == id).delete()
+
+    if refs["notifications_received"] > 0:
+        deleted["notifications_received"] = db.query(Notification).filter(Notification.recipient_user_id == id).delete()
+
+    if refs["documents_uploaded"] > 0:
+        deleted["documents_uploaded"] = db.query(Document).filter(Document.uploaded_by == id).delete()
+
+    if refs["messages_sent"] > 0:
+        deleted["messages_sent"] = db.query(Message).filter(Message.sender_id == id).delete()
+
+    if refs["progress_updates"] > 0:
+        deleted["progress_updates"] = db.query(ProgressHistory).filter(ProgressHistory.updated_by == id).delete()
+
+    # Set applicant references to NULL where possible
+    if refs["applicants_created"] > 0:
+        db.query(Applicant).filter(Applicant.created_by == id).update({"created_by": None})
+        deleted["applicants_created"] = refs["applicants_created"]
+    if refs["applicants_assigned"] > 0:
+        db.query(Applicant).filter(Applicant.assigned_to == id).update({"assigned_to": None})
+        deleted["applicants_assigned"] = refs["applicants_assigned"]
+    if refs["applicants_deleted"] > 0:
+        db.query(Applicant).filter(Applicant.deleted_by == id).update({"deleted_by": None})
+        deleted["applicants_deleted"] = refs["applicants_deleted"]
+    if refs["documents_deleted"] > 0:
+        db.query(Document).filter(Document.deleted_by == id).update({"deleted_by": None})
+        deleted["documents_deleted"] = refs["documents_deleted"]
+
+    # Delete the employee
+    name = user.name
+    db.delete(user)
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("Production cleanup failed for employee %d: %s", id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cleanup failed: {exc}",
+        )
+
+    logger.info("PRODUCTION CLEANUP: Removed employee '%s' (ID %d) and %d references", name, id, total_refs)
+
+    return success_response(
+        message=f"Production cleanup complete: '{name}' and {total_refs} development reference(s) removed.",
+        data={"deleted_employee": name, "references_removed": refs, "total": total_refs},
+    )
+
+
 # ── POST /{id}/transfer-applicants ──────────────
 
 @router.post("/{id}/transfer-applicants")
