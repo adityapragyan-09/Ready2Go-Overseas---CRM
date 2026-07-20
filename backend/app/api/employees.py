@@ -325,20 +325,56 @@ def delete_employee_route(
     if user.id == admin.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account.")
 
+    name = user.name
+
+    # Check all RESTRICT foreign keys before attempting deletion
+    from app.models.document import Document
+    from app.models.message import Message
+    from app.models.progress import ProgressHistory
+
+    blockers = []
+
+    # applicant.created_by (RESTRICT)
+    created_apps = db.query(Applicant.id).filter(Applicant.created_by == id).count()
+    if created_apps > 0:
+        blockers.append(f"applicants (created_by): {created_apps} records")
+
+    # document.uploaded_by (RESTRICT)
+    uploaded_docs = db.query(Document.id).filter(Document.uploaded_by == id).count()
+    if uploaded_docs > 0:
+        blockers.append(f"documents (uploaded_by): {uploaded_docs} records")
+
+    # message.sender_id (RESTRICT)
+    sent_msgs = db.query(Message.id).filter(Message.sender_id == id).count()
+    if sent_msgs > 0:
+        blockers.append(f"messages (sender_id): {sent_msgs} records")
+
+    # progress.updated_by (RESTRICT)
+    progress_updates = db.query(ProgressHistory.id).filter(ProgressHistory.updated_by == id).count()
+    if progress_updates > 0:
+        blockers.append(f"progress_history (updated_by): {progress_updates} records")
+
+    # Also check assigned_to (should be SET NULL, but check anyway)
     assigned_count = db.query(Applicant).filter(Applicant.assigned_to == id, Applicant.is_deleted == False).count()
     if assigned_count > 0:
+        blockers.append(f"applicants (assigned_to): {assigned_count} active applicants")
+
+    if blockers:
+        detail = "Employee cannot be deleted. The following references exist:\n" + "\n".join(f"  - {b}" for b in blockers)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"This employee currently has {assigned_count} assigned applicant(s). Transfer them before deleting.",
+            detail=detail,
         )
 
-    name = user.name
     try:
         db.delete(user)
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete employee.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete employee. Database error: {exc}",
+        )
 
     return success_response(message=f"Employee '{name}' deleted permanently.")
 
