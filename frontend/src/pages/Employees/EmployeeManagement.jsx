@@ -502,6 +502,12 @@ export const EmployeeManagement = () => {
   const [transferEmployeeId, setTransferEmployeeId] = useState('');
   const [confirmAction, setConfirmAction] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [archiveModal, setArchiveModal] = useState(null);
+  const [archiveReason, setArchiveReason] = useState('Annual Leave');
+  const [leaveStart, setLeaveStart] = useState('');
+  const [leaveEnd, setLeaveEnd] = useState('');
+  const [archiveHasApplicants, setArchiveHasApplicants] = useState(false);
+  const [archiveTransferTo, setArchiveTransferTo] = useState('');
 
   // Deep-link: detect ?view=add from URL (used by Dashboard quick action)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -608,16 +614,47 @@ export const EmployeeManagement = () => {
     }
   };
 
-  const handleArchiveEmployee = (emp) => {
-    setConfirmAction({
-      title: 'Archive Employee',
-      message: `Are you sure you want to archive "${emp.full_name}"?`,
-      warning: 'Archived employees cannot login or be assigned new applicants.',
-      confirmText: 'Archive',
-      confirmVariant: 'warning',
-      employee: emp,
-      action: 'archive',
-    });
+  const handleArchiveEmployee = async (emp) => {
+    setArchiveReason('Annual Leave');
+    setLeaveStart('');
+    setLeaveEnd('');
+    setArchiveTransferTo('');
+    // Check if employee has assigned applicants
+    try {
+      const res = await api.get(`/applicants?assigned_to=${emp.id}&page_size=1`);
+      setArchiveHasApplicants((res.data?.data?.total || 0) > 0);
+    } catch {
+      setArchiveHasApplicants(false);
+    }
+    setArchiveModal(emp);
+  };
+
+  const handleConfirmArchive = async () => {
+    if (!archiveModal) return;
+    setConfirmLoading(true);
+    try {
+      // First transfer if needed
+      if (archiveHasApplicants && archiveTransferTo) {
+        await api.post(`/employees/${archiveModal.id}/transfer-applicants`, {
+          target_employee_id: Number(archiveTransferTo)
+        });
+      }
+      // Then archive
+      const res = await api.patch(`/employees/${archiveModal.id}/archive`, {
+        reason: archiveReason,
+        leave_start: leaveStart || null,
+        leave_end: leaveEnd || null,
+      });
+      if (res.data?.success) {
+        toast.success(`"${archiveModal.full_name}" archived.` + (archiveHasApplicants && archiveTransferTo ? ' Applicants transferred.' : ''));
+        setArchiveModal(null);
+        fetchEmployees();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to archive employee.');
+    } finally {
+      setConfirmLoading(false);
+    }
   };
 
   const handleRestoreEmployee = (emp) => {
@@ -1020,6 +1057,75 @@ export const EmployeeManagement = () => {
                 disabled={!transferEmployeeId}
                 className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all disabled:opacity-50">
                 Transfer & Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive Modal */}
+      {archiveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => setArchiveModal(null)} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 text-left z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-full bg-amber-50 text-amber-500"><UserX size={24} /></div>
+              <h3 className="text-sm font-bold text-slate-800">Archive Employee</h3>
+            </div>
+            <p className="text-xs text-slate-600 mb-4">
+              {archiveHasApplicants
+                ? `"${archiveModal.full_name}" currently manages active applicants.`
+                : `Archive "${archiveModal.full_name}"? They will not receive new applicants during leave.`}
+            </p>
+
+            {/* Reason */}
+            <div className="mb-3">
+              <label className="text-xs font-bold text-slate-600 block mb-1">Reason</label>
+              <select value={archiveReason} onChange={(e) => setArchiveReason(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-brand-orange">
+                <option>Annual Leave</option>
+                <option>Sick Leave</option>
+                <option>Personal Leave</option>
+                <option>Training</option>
+                <option>Suspension</option>
+                <option>Resigned</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            {/* Leave dates */}
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Leave Start</label>
+                <input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-orange" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Leave End</label>
+                <input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-orange" />
+              </div>
+            </div>
+
+            {/* Transfer if has applicants */}
+            {archiveHasApplicants && (
+              <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
+                <p className="text-xs font-bold text-amber-800 mb-2">Transfer Applicants</p>
+                <select value={archiveTransferTo} onChange={(e) => setArchiveTransferTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-amber-200 rounded-xl text-xs outline-none focus:border-amber-500">
+                  <option value="">Select employee...</option>
+                  {employees.filter(e => e.id !== archiveModal.id && e.is_active).sort((a,b) => (a.full_name||'').localeCompare(b.full_name||'')).map(e => (
+                    <option key={e.id} value={e.id}>{e.full_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setArchiveModal(null)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all">Cancel</button>
+              <button onClick={handleConfirmArchive} disabled={confirmLoading || (archiveHasApplicants && !archiveTransferTo)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-all disabled:opacity-50">
+                {confirmLoading ? 'Processing...' : archiveHasApplicants ? 'Transfer & Archive' : 'Archive Employee'}
               </button>
             </div>
           </div>

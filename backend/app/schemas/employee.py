@@ -21,6 +21,9 @@ class EmployeeOut(BaseModel):
     profile_photo: str | None = Field(default=None, serialization_alias="profile_photo")
     is_active: bool
     archived_at: datetime | None = Field(default=None, serialization_alias="archived_at")
+    archived_reason: str | None = Field(default=None, serialization_alias="archived_reason")
+    leave_start: datetime | None = Field(default=None, serialization_alias="leave_start")
+    leave_end: datetime | None = Field(default=None, serialization_alias="leave_end")
     last_login: datetime | None = None
     last_logout: datetime | None = None
     created_at: datetime
@@ -61,6 +64,13 @@ class EmployeeProfileUpdate(BaseModel):
     designation: str | None = None
     department: str | None = None
     profile_photo: str | None = None
+
+
+class ArchiveRequest(BaseModel):
+    """Schema for archiving an employee with reason and optional dates."""
+    reason: str = Field(default="Other", max_length=100)
+    leave_start: str | None = Field(default=None, description="Leave start date (YYYY-MM-DD)")
+    leave_end: str | None = Field(default=None, description="Leave end date (YYYY-MM-DD)")
 
 
 class EmployeeStatusUpdate(BaseModel):

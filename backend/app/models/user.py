@@ -29,6 +29,9 @@ class User(Base):
     profile_photo: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     archived_at: Mapped[datetime | None] = deferred(mapped_column(DateTime(timezone=True), nullable=True))
+    archived_reason: Mapped[str | None] = deferred(mapped_column(String(100), nullable=True))
+    leave_start: Mapped[datetime | None] = deferred(mapped_column(DateTime(timezone=True), nullable=True))
+    leave_end: Mapped[datetime | None] = deferred(mapped_column(DateTime(timezone=True), nullable=True))
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_logout: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

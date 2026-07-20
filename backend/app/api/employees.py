@@ -14,6 +14,7 @@ from app.core.dependencies import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.employee import (
+    ArchiveRequest,
     EmployeeCreate,
     EmployeeListResponse,
     EmployeeOut,
@@ -54,6 +55,9 @@ def _safe_employee_out(user) -> dict:
             "profile_photo": getattr(user, "profile_photo", None),
             "is_active": getattr(user, "is_active", True),
             "archived_at": None,
+            "archived_reason": getattr(user, "archived_reason", None),
+            "leave_start": getattr(user, "leave_start", None),
+            "leave_end": getattr(user, "leave_end", None),
             "last_login": getattr(user, "last_login", None),
             "last_logout": getattr(user, "last_logout", None),
             "created_at": getattr(user, "created_at", None),
@@ -251,13 +255,15 @@ def reset_employee_password_route(
 @router.patch("/{id}/archive")
 def archive_employee_route(
     id: int,
+    body: ArchiveRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
     """
-    Archive an employee. Archived employees cannot login or be assigned.
-    Access restricted to administrators.
+    Archive an employee with reason and optional leave dates.
+    Archived employees cannot login or be assigned.
     """
+    from datetime import datetime
     user = db.query(User).filter(User.id == id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
@@ -266,12 +272,28 @@ def archive_employee_route(
 
     user.is_active = False
     user.archived_at = datetime.now(timezone.utc)
+    user.archived_reason = body.reason
+
+    if body.leave_start:
+        try:
+            user.leave_start = datetime.strptime(body.leave_start, "%Y-%m-%d")
+        except ValueError:
+            pass
+    if body.leave_end:
+        try:
+            user.leave_end = datetime.strptime(body.leave_end, "%Y-%m-%d")
+        except ValueError:
+            pass
+
     try:
         db.commit()
         db.refresh(user)
     except Exception:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to archive employee.")
+
+    logger.info("Employee '%s' (ID %d) archived. Reason: %s. Leave: %s - %s",
+                user.name, id, body.reason, body.leave_start or 'N/A', body.leave_end or 'N/A')
 
     data = _safe_employee_out(user)
     return success_response(message="Employee archived successfully.", data=data)
