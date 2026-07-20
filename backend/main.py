@@ -80,12 +80,13 @@ def run_database_migrations():
         for line in (result.stderr or "").strip().split("\n"):
             if line.strip():
                 logger.error("Migration error: %s", line.strip())
-        raise RuntimeError(
-            f"Alembic migration failed (exit {result.returncode}). "
-            "Server startup aborted to prevent schema mismatch. "
-            "Fix the migration and redeploy."
+        logger.warning(
+            "Application starting with pending migrations. "
+            "The /ready endpoint will report 'degraded' until "
+            "all migrations are applied."
         )
-    logger.info("Database migrations completed successfully.")
+    else:
+        logger.info("Database migrations completed successfully.")
 
 
 # ── Request ID Middleware ───────────────────────
