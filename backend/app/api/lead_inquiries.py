@@ -30,6 +30,7 @@ from app.schemas.lead_inquiry import (
     LeadInquiryUpdate,
 )
 from app.services import lead_inquiry_service as service
+from app.services.lead_activity_service import get_activities, log_activity
 from app.services.notification_service import create_notification
 from app.utils.response import success_response
 
@@ -57,6 +58,9 @@ def create_lead_route(
     Requires JWT authentication.
     Generates automatic notification on creation.
     """
+    # Check for duplicates
+    duplicates = service.check_duplicate(db, email=body.email, phone=body.phone, full_name=body.full_name)
+
     lead = service.create_lead(
         db,
         full_name=body.full_name,
@@ -87,9 +91,16 @@ def create_lead_route(
     except Exception:
         pass  # Non-fatal
 
+    response_data = _serialize_lead(lead)
+    if duplicates:
+        response_data["duplicates"] = [
+            {"id": d.id, "lead_number": d.lead_number, "full_name": d.full_name, "status": d.status}
+            for d in duplicates
+        ]
+
     return success_response(
-        message="Lead inquiry created successfully.",
-        data=_serialize_lead(lead),
+        message="Lead inquiry created successfully." + (f" {len(duplicates)} duplicate(s) found." if duplicates else ""),
+        data=response_data,
     )
 
 
@@ -198,7 +209,7 @@ def update_lead_status_route(
     current_user: User = Depends(get_current_user),
 ):
     """Update the status of a lead inquiry."""
-    lead = service.change_lead_status(db, id, body.status)
+    lead = service.change_lead_status(db, id, body.status, changed_by=current_user.id)
     return success_response(
         message=f"Lead status updated to '{lead.status}'.",
         data=_serialize_lead(lead),
@@ -215,7 +226,7 @@ def assign_lead_route(
     current_user: User = Depends(get_current_user),
 ):
     """Assign a lead inquiry to an employee."""
-    lead = service.assign_employee(db, id, body.employee_id)
+    lead = service.assign_employee(db, id, body.employee_id, assigned_by=current_user.id)
     assigned_name = lead.assigned_employee.name if lead.assigned_employee else "Unknown"
     return success_response(
         message=f"Lead assigned to {assigned_name}.",
@@ -233,3 +244,31 @@ def convert_lead_route(
 ):
     """Convert a lead to an applicant. (Stub — returns 501)"""
     return service.convert_to_applicant(db, id)
+
+
+# ── GET /{id}/activities ──────────────────
+
+@router.get("/{id}/activities")
+def get_lead_activities_route(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retrieve timeline of activities for a lead inquiry."""
+    activities = get_activities(db, id)
+    activity_data = [
+        {
+            "id": a.id,
+            "action": a.action,
+            "description": a.description,
+            "old_value": a.old_value,
+            "new_value": a.new_value,
+            "created_by_name": a.creator.name if a.creator else None,
+            "created_at": a.created_at,
+        }
+        for a in activities
+    ]
+    return success_response(
+        message="Lead activities retrieved successfully.",
+        data=activity_data,
+    )

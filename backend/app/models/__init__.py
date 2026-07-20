@@ -16,3 +16,4 @@ from app.models.user import User  # noqa: F401
 from app.models.progress import ProgressHistory  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.lead_inquiry import LeadInquiry  # noqa: F401
+from app.models.lead_activity import LeadActivity  # noqa: F401

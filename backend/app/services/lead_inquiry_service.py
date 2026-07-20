@@ -27,6 +27,28 @@ def _generate_lead_number(db: Session) -> str:
     return f"{_CODE_PREFIX}-{next_num:06d}"
 
 
+def check_duplicate(
+    db: Session,
+    email: str | None = None,
+    phone: str | None = None,
+    full_name: str | None = None,
+) -> list[LeadInquiry]:
+    """
+    Detect potential duplicate leads by email or phone.
+    Returns list of existing leads that match.
+    """
+    if not email and not phone:
+        return []
+    conditions = []
+    if email:
+        conditions.append(LeadInquiry.email == email.lower())
+    if phone:
+        conditions.append(LeadInquiry.phone == phone)
+    if not conditions:
+        return []
+    return db.query(LeadInquiry).filter(or_(*conditions)).order_by(LeadInquiry.created_at.desc()).limit(5).all()
+
+
 def create_lead(
     db: Session,
     *,
@@ -43,7 +65,14 @@ def create_lead(
     """
     Create a new lead inquiry.
     Auto-generates lead_number and UUID.
+    Returns existing duplicates if detected.
     """
+    # Check duplicates
+    duplicates = check_duplicate(db, email=email, phone=phone)
+    if duplicates:
+        dup_info = [{"id": d.id, "lead_number": d.lead_number, "full_name": d.full_name, "status": d.status} for d in duplicates]
+        logger.info("Duplicate lead detected: email=%s phone=%s matches=%d", email, phone, len(duplicates))
+
     lead_number = _generate_lead_number(db)
 
     lead = LeadInquiry(
@@ -71,6 +100,14 @@ def create_lead(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create lead inquiry.",
         )
+
+    # Log creation activity
+    from app.services.lead_activity_service import log_activity
+    log_activity(
+        db, lead_id=lead.id, action="CREATED",
+        description=f"Lead created from {source}",
+        created_by=created_by,
+    )
 
     logger.info("Lead inquiry created: %s (%s)", lead.lead_number, lead.full_name)
     return lead
@@ -182,9 +219,12 @@ def delete_lead(db: Session, lead_id: int) -> dict:
     return {"full_name": name, "lead_number": lead_number}
 
 
-def change_lead_status(db: Session, lead_id: int, new_status: str) -> LeadInquiry:
+def change_lead_status(db: Session, lead_id: int, new_status: str, changed_by: int | None = None) -> LeadInquiry:
     """Update the status of a lead inquiry."""
+    from app.services.lead_activity_service import log_activity
+
     lead = get_lead(db, lead_id)
+    old_status = lead.status
     lead.status = new_status.upper()
 
     try:
@@ -198,12 +238,20 @@ def change_lead_status(db: Session, lead_id: int, new_status: str) -> LeadInquir
             detail="Failed to update lead status.",
         )
 
+    log_activity(
+        db, lead_id=lead_id, action="STATUS_CHANGED",
+        description=f"Status changed from {old_status} to {new_status.upper()}",
+        old_value=old_status, new_value=new_status.upper(),
+        created_by=changed_by,
+    )
+
     return lead
 
 
-def assign_employee(db: Session, lead_id: int, employee_id: int) -> LeadInquiry:
+def assign_employee(db: Session, lead_id: int, employee_id: int, assigned_by: int | None = None) -> LeadInquiry:
     """Assign a lead to an employee."""
-    # Verify employee exists
+    from app.services.lead_activity_service import log_activity
+
     emp = db.query(User).filter(User.id == employee_id).first()
     if not emp:
         raise HTTPException(
@@ -224,6 +272,13 @@ def assign_employee(db: Session, lead_id: int, employee_id: int) -> LeadInquiry:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to assign lead.",
         )
+
+    log_activity(
+        db, lead_id=lead_id, action="ASSIGNED",
+        description=f"Assigned to {emp.name}",
+        new_value=emp.name,
+        created_by=assigned_by,
+    )
 
     return lead
 
