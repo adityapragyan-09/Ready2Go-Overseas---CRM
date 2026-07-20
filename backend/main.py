@@ -55,31 +55,34 @@ def run_database_migrations():
     """Execute Alembic migrations before the first request is handled.
 
     This ensures the database schema is always synchronized with the
-    SQLAlchemy models, regardless of whether Render uses Docker (where
-    startup.sh handles this) or Native Python runtime (where Render
-    controls the start command directly).
+    SQLAlchemy models. Runs 'alembic upgrade head' which applies ALL
+    pending migrations in order.
 
-    The subprocess runs 'alembic upgrade head' which applies ALL pending
-    migrations in order. If the migration fails, the application logs the
-    error but still starts — this allows the health check to report the
-    database status via /ready.
+    If migration fails, the application logs the error and raises a
+    RuntimeError, which prevents the server from starting. This ensures
+    the application NEVER runs with an outdated database schema.
     """
-    try:
-        logger.info("Running database migrations...")
-        result = subprocess.run(
-            ["alembic", "upgrade", "head"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        logger.info("Migration stdout: %s", result.stdout.strip() if result.stdout else "(none)")
-        if result.returncode != 0:
-            logger.error("Migration stderr: %s", result.stderr.strip() if result.stderr else "(none)")
-            logger.error("Migration failed with exit code %d", result.returncode)
-        else:
-            logger.info("Database migrations completed successfully.")
-    except Exception as exc:
-        logger.error("Migration command failed to execute: %s", exc)
+    import sys
+    logger.info("Running database migrations...")
+    result = subprocess.run(
+        ["alembic", "upgrade", "head"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    for line in (result.stdout or "").strip().split("\n"):
+        if line.strip():
+            logger.info("Migration: %s", line.strip())
+    if result.returncode != 0:
+        logger.error("Migration FAILED. Exit code: %d", result.returncode)
+        for line in (result.stderr or "").strip().split("\n"):
+            if line.strip():
+                logger.error("Migration error: %s", line.strip())
+        # Hard fail — never start with outdated schema
+        sys.stderr.write("FATAL: Database migration failed. Server will not start.\n")
+        sys.stderr.write(result.stderr or "")
+        sys.exit(1)
+    logger.info("Database migrations completed successfully.")
 
 
 # ── Request ID Middleware ───────────────────────
