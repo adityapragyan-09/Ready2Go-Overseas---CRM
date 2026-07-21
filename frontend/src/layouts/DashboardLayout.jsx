@@ -16,7 +16,8 @@ import {
   Shield,
   Activity,
   ChevronDown,
-  PhoneCall
+  PhoneCall,
+  ClipboardList
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NotificationBell from '../components/NotificationBell';
@@ -60,7 +61,8 @@ const DashboardLayout = () => {
   if (user?.role === 'admin') {
     navItems.push(
       { label: 'Employee Management', path: '/employees', icon: Shield },
-      { label: 'Activity Logs', path: '/activity-logs', icon: Activity }
+      { label: 'Activity Logs', path: '/activity-logs', icon: Activity },
+      { label: 'Assignment Requests', path: '/assignment-requests', icon: ClipboardList }
     );
   }
 

@@ -18,6 +18,7 @@ import ServerError from './pages/Errors/ServerError';
 
 import { ActivityLogs } from './pages/ActivityLogs/ActivityLogs';
 import LeadInquiriesPage from './pages/LeadInquiries/LeadInquiriesPage';
+import { AssignmentRequestsPage } from './pages/AssignmentRequests/AssignmentRequestsPage';
 
 function App() {
   return (
@@ -53,6 +54,7 @@ function App() {
               <Route path="/applicants" element={<ApplicantsPage />} />
               <Route path="/employees" element={<EmployeeManagement />} />
               <Route path="/lead-inquiries" element={<LeadInquiriesPage />} />
+              <Route path="/assignment-requests" element={<ProtectedRoute requireAdmin><AssignmentRequestsPage /></ProtectedRoute>} />
               <Route path="/activity-logs" element={<ProtectedRoute requireAdmin><ActivityLogs /></ProtectedRoute>} />
             </Route>
 
