@@ -37,6 +37,8 @@ export const LeadInquiriesPage = () => {
   const [assigningLead, setAssigningLead] = useState(null);
   const [assignSearch, setAssignSearch] = useState('');
   const [assignLoading, setAssignLoading] = useState({});
+  const [pendingRequests, setPendingRequests] = useState({});
+  const [requestLoading, setRequestLoading] = useState({});
 
   // Fetch employees for admin assignment dropdown
   const fetchEmployees = useCallback(async () => {
@@ -54,6 +56,62 @@ export const LeadInquiriesPage = () => {
   useEffect(() => {
     fetchEmployees();
   }, [fetchEmployees]);
+
+  // Fetch pending requests for the current employee
+  const fetchPendingRequests = useCallback(async () => {
+    try {
+      const res = await api.get('/assignment-requests', { params: { page_size: 100 } });
+      if (res.data?.success) {
+        const reqs = {};
+        (res.data.data.items || []).forEach(r => {
+          if (r.status === 'PENDING') {
+            reqs[r.lead_id] = r;
+          }
+        });
+        setPendingRequests(reqs);
+      }
+    } catch {
+      // Silent fail
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      fetchPendingRequests();
+    }
+  }, [isAdmin, fetchPendingRequests, page]);
+
+  const handleRequestAssignment = async (leadId) => {
+    if (!window.confirm('Request assignment of this lead to yourself? It requires admin approval.')) return;
+    setRequestLoading(prev => ({ ...prev, [leadId]: true }));
+    try {
+      const res = await api.post('/assignment-requests', { lead_id: leadId });
+      if (res.data?.success) {
+        toast.success('Assignment request submitted for admin approval.');
+        fetchPendingRequests();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to submit request.');
+    } finally {
+      setRequestLoading(prev => ({ ...prev, [leadId]: false }));
+    }
+  };
+
+  const handleCancelRequest = async (requestId, leadId) => {
+    if (!window.confirm('Cancel this assignment request?')) return;
+    setRequestLoading(prev => ({ ...prev, [leadId]: true }));
+    try {
+      const res = await api.delete(`/assignment-requests/${requestId}`);
+      if (res.data?.success) {
+        toast.success('Request cancelled.');
+        fetchPendingRequests();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to cancel request.');
+    } finally {
+      setRequestLoading(prev => ({ ...prev, [leadId]: false }));
+    }
+  };
 
   const fetchLeads = async () => {
     try {
@@ -273,7 +331,35 @@ export const LeadInquiriesPage = () => {
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-600">{lead.assigned_employee_name || '—'}</span>
+                        <div className="flex items-center gap-1.5">
+                          {lead.assigned_employee_id === user?.id ? (
+                            <span className="text-[10px] font-bold px-2 py-1 rounded bg-emerald-50 text-emerald-600">Assigned to you</span>
+                          ) : lead.assigned_employee_name ? (
+                            <span className="text-xs text-slate-600">{lead.assigned_employee_name}</span>
+                          ) : pendingRequests[lead.id] ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold px-2 py-1 rounded bg-amber-50 text-amber-600">Pending Approval</span>
+                              <button
+                                onClick={() => handleCancelRequest(pendingRequests[lead.id].id, lead.id)}
+                                disabled={requestLoading[lead.id]}
+                                className="text-[9px] text-red-500 hover:text-red-700 font-bold transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleRequestAssignment(lead.id)}
+                              disabled={requestLoading[lead.id]}
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-500 font-semibold hover:border-brand-orange hover:text-brand-orange transition-all disabled:opacity-50"
+                            >
+                              {requestLoading[lead.id] ? (
+                                <span className="w-3 h-3 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
+                              ) : null}
+                              Request Assignment
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="py-3 px-4 text-[10px] text-slate-400">{new Date(lead.created_at).toLocaleDateString()}</td>
