@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -21,7 +21,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../context/NotificationContext';
+import api from '../../config/api';
 import dashboardService from '../../services/dashboardService';
+import leadInquiryService from '../../services/leadInquiryService';
 import Card from '../../components/Card';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import toast from 'react-hot-toast';
@@ -48,6 +50,8 @@ export const Dashboard = () => {
   const [advisorApplicants, setAdvisorApplicants] = useState([]);
   const [isLoadingAdvisor, setIsLoadingAdvisor] = useState(false);
   const [selectedDeleteDate, setSelectedDeleteDate] = useState('');
+  const [myLeads, setMyLeads] = useState([]);
+  const [myLeadsLoading, setMyLeadsLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadAdvisorApplicants = async (employeeId, name) => {
@@ -103,6 +107,20 @@ export const Dashboard = () => {
     }
   };
 
+  // Fetch assigned leads for employees
+  const fetchMyLeads = useCallback(async () => {
+    if (isAdmin || !user?.id) return;
+    setMyLeadsLoading(true);
+    try {
+      const data = await leadInquiryService.getLeads({ assigned_to: user.id, page_size: 100 });
+      setMyLeads(data.leads || []);
+    } catch {
+      // Silent fail
+    } finally {
+      setMyLeadsLoading(false);
+    }
+  }, [isAdmin, user?.id]);
+
   // BUG FIX: Depend on the full `user` object (not the derived `isAdmin` boolean).
   // When AuthContext resolves asynchronously, `isAdmin` flips from false→true causing
   // a double fetch. Guarding on `user` (null → object) triggers only once after auth,
@@ -110,6 +128,7 @@ export const Dashboard = () => {
   useEffect(() => {
     if (!user) return; // wait for auth to resolve before fetching
     loadDashboardData();
+    fetchMyLeads();
   }, [user?.id]); // use user.id as stable dependency — won't change on re-renders
 
   if (isLoading) {
@@ -441,6 +460,57 @@ export const Dashboard = () => {
         </Card>
 
       </div>
+
+      {/* ── MY ASSIGNED LEADS (Employee) ── */}
+      {!isAdmin && (
+        <Card title="My Assigned Leads" subtitle="Leads currently assigned to you">
+          {myLeadsLoading ? (
+            <div className="py-8 flex justify-center"><div className="w-6 h-6 border-2 border-brand-orange border-t-transparent rounded-full animate-spin"></div></div>
+          ) : myLeads.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-6">No assigned leads yet. Leads will appear here once assigned by an admin.</p>
+          ) : (
+            <div className="overflow-x-auto -mx-6 px-6">
+              <table className="w-full text-left border-collapse min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Lead</th>
+                    <th className="py-3 px-4">Student</th>
+                    <th className="py-3 px-4">Visa / Country</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Created</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 text-sm">
+                  {myLeads.map((lead) => (
+                    <tr key={lead.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="py-3 px-4">
+                        <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">{lead.lead_number}</span>
+                      </td>
+                      <td className="py-3 px-4 font-bold text-slate-800">{lead.full_name}</td>
+                      <td className="py-3 px-4 text-xs">
+                        <p className="capitalize text-slate-700">{lead.visa_type}</p>
+                        {lead.preferred_country && <p className="text-[10px] text-slate-400">{lead.preferred_country}</p>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase ${lead.status === 'NEW' ? 'text-blue-600 bg-blue-50' : lead.status === 'CONTACTED' ? 'text-amber-600 bg-amber-50' : lead.status === 'FOLLOW_UP' ? 'text-purple-600 bg-purple-50' : lead.status === 'QUALIFIED' ? 'text-emerald-600 bg-emerald-50' : lead.status === 'CONVERTED' ? 'text-green-600 bg-green-50' : lead.status === 'CLOSED' ? 'text-slate-500 bg-slate-50' : ''}`}>
+                          {lead.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-[10px] text-slate-400">{new Date(lead.created_at).toLocaleDateString()}</td>
+                      <td className="py-3 px-4 text-right">
+                        <button onClick={() => navigate(`/lead-inquiries`)} className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all">
+                          <Eye size={12} /> View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* ── EMPLOYEE PERFORMANCE & WORKLOAD TABLE ── */}
       <Card title="Advisor Workload & Productivity" subtitle="Active, completed, and pending cases by advisor">
