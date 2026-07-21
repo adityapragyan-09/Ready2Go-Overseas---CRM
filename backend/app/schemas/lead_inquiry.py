@@ -45,8 +45,8 @@ class WebsiteLeadCreate(BaseModel):
 
 
 class LeadInquiryCreate(BaseModel):
-    """Schema for creating a new lead inquiry (CRM internal)."""
-    request_id: str | None = Field(default=None, max_length=36)
+    """Schema for creating a new lead inquiry (shared by CRM users and website)."""
+    request_id: str | None = Field(default=None, max_length=36, description="Client-generated UUIDv4")
     full_name: str = Field(..., min_length=1, max_length=150)
     email: str | None = Field(default=None, max_length=120)
     phone: str | None = Field(default=None, max_length=20)
@@ -55,6 +55,17 @@ class LeadInquiryCreate(BaseModel):
     message: str | None = Field(default=None)
     source: str = Field(default="WEBSITE", max_length=30)
     assigned_employee_id: int | None = None
+
+    @field_validator("request_id")
+    @classmethod
+    def validate_request_id(cls, v: str | None) -> str | None:
+        if v is not None:
+            import uuid
+            try:
+                uuid.UUID(v)
+            except ValueError:
+                raise ValueError("request_id must be a valid UUIDv4 string.")
+        return v
 
     @field_validator("source")
     @classmethod
@@ -70,6 +81,11 @@ class LeadInquiryCreate(BaseModel):
         if v.lower() not in allowed:
             raise ValueError(f"Invalid visa type. Allowed: {', '.join(allowed)}")
         return v.lower()
+
+    @field_validator("full_name")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip()
 
 
 class LeadInquiryUpdate(BaseModel):

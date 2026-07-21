@@ -18,7 +18,7 @@ Endpoints:
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, verify_api_key
+from app.core.dependencies import LeadIdentity, get_current_user, resolve_lead_identity
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.lead_inquiry import (
@@ -28,7 +28,6 @@ from app.schemas.lead_inquiry import (
     LeadInquiryResponse,
     LeadInquiryStatusUpdate,
     LeadInquiryUpdate,
-    WebsiteLeadCreate,
 )
 from app.services import lead_inquiry_service as service
 from app.services.lead_activity_service import get_activities, log_activity
@@ -47,58 +46,23 @@ def _serialize_lead(lead) -> dict:
     return data
 
 
-# ── POST /website ───────────────────────────
-# Public endpoint for website integration (API-key auth)
-
-@router.post("/website", status_code=status.HTTP_201_CREATED)
-def create_lead_from_website(
-    body: WebsiteLeadCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(verify_api_key),
-):
-    """Create a lead inquiry from the public website. Uses API-key authentication."""
-    lead = service.create_lead(
-        db,
-        full_name=body.full_name,
-        email=body.email,
-        phone=body.phone,
-        visa_type=body.visa_type,
-        preferred_country=body.preferred_country,
-        message=body.message,
-        source=body.source or "Website",
-        request_id=body.request_id,
-    )
-
-    logger.info(
-        "Website lead created [request_id=%s lead_number=%s full_name=%s source=%s ip=%s]",
-        body.request_id, lead.lead_number, lead.full_name, body.source,
-        request.client.host if request.client else "unknown",
-    )
-
-    return success_response(
-        message="Lead inquiry created successfully.",
-        data={
-            "lead_id": lead.id,
-            "lead_number": lead.lead_number,
-            "status": lead.status,
-            "request_id": body.request_id,
-        },
-    )
-
-
 # ── POST / ──────────────────────────────────
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_lead_route(
     body: LeadInquiryCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    identity: LeadIdentity = Depends(resolve_lead_identity),
 ):
     """
     Create a new lead inquiry.
-    Requires JWT authentication.
-    Generates automatic notification on creation.
+
+    Authentication:
+    - CRM Users: JWT Bearer token
+    - Website: CRM_API_KEY as Bearer token
+
+    Both use the same validation and business logic.
     """
     duplicates = service.check_duplicate(db, email=body.email, phone=body.phone, full_name=body.full_name)
 
@@ -110,28 +74,35 @@ def create_lead_route(
         visa_type=body.visa_type,
         preferred_country=body.preferred_country,
         message=body.message,
-        source=body.source,
+        source=body.source or "Website",
         request_id=body.request_id,
         assigned_employee_id=body.assigned_employee_id,
-        created_by=current_user.id,
+        created_by=identity.user_id,
     )
 
-    # Create notification for new lead
-    try:
-        create_notification(
-            db,
-            title="New Website Inquiry",
-            message=f"Lead inquiry from {lead.full_name} for {lead.preferred_country or 'unspecified country'}.",
-            type="info",
-            module="applicant",
-            priority="medium",
-            recipient_user_id=current_user.id,
-            created_by=current_user.id,
-            reference_type="lead",
-            reference_id=lead.id,
-        )
-    except Exception:
-        pass  # Non-fatal
+    # Notifications only for CRM users
+    if identity.caller_type == "crm_user" and identity.user_id:
+        try:
+            create_notification(
+                db,
+                title="New Inquiry",
+                message=f"Lead inquiry from {lead.full_name} for {lead.preferred_country or 'unspecified country'}.",
+                type="info",
+                module="applicant",
+                priority="medium",
+                recipient_user_id=identity.user_id,
+                created_by=identity.user_id,
+                reference_type="lead",
+                reference_id=lead.id,
+            )
+        except Exception:
+            pass  # Non-fatal
+
+    logger.info(
+        "Lead created [caller=%s request_id=%s lead_number=%s source=%s ip=%s]",
+        identity.caller_type, body.request_id, lead.lead_number, body.source,
+        request.client.host if request.client else "unknown",
+    )
 
     response_data = _serialize_lead(lead)
     if duplicates:

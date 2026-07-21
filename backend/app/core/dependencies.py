@@ -116,26 +116,84 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-async def verify_api_key(authorization: str = Header(..., alias="Authorization")) -> str:
+from dataclasses import dataclass
+
+
+@dataclass
+class LeadIdentity:
+    """Represents the identity of the caller for lead creation."""
+    caller_type: str  # "crm_user" or "website"
+    user_id: int | None = None  # Set for CRM users
+    user: User | None = None  # Set for CRM users
+
+
+async def resolve_lead_identity(
+    request: Request,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> LeadIdentity:
     """
-    Validate the CRM API key for server-to-server requests.
-    Expected format: Authorization: Bearer <CRM_API_KEY>
-    Used by the public website integration endpoint.
+    Unified authentication for lead inquiry creation.
+
+    Supports two auth methods:
+    1. JWT Bearer token (CRM users)
+    2. CRM API Key (Website integration)
+
+    Returns a LeadIdentity with the caller context.
     """
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header required.",
+        )
+
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format.",
+            detail="Invalid authorization header format. Use: Bearer <token>",
         )
-    api_key = authorization.replace("Bearer ", "")
-    if not settings.CRM_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="CRM_API_KEY not configured.",
-        )
-    if api_key != settings.CRM_API_KEY:
+
+    token = authorization.replace("Bearer ", "")
+
+    # Try JWT first (CRM user)
+    if settings.CRM_API_KEY and token == settings.CRM_API_KEY:
+        # API key match — website caller
+        return LeadIdentity(caller_type="website")
+
+    # JWT authentication
+    payload = decode_access_token(token)
+    if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key.",
+            detail="Invalid or expired token.",
         )
-    return api_key
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload.",
+        )
+
+    try:
+        user_id = int(user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload.",
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been deactivated.",
+        )
+
+    return LeadIdentity(caller_type="crm_user", user_id=user.id, user=user)
