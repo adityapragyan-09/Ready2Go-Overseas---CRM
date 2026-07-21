@@ -19,7 +19,7 @@ import ServerError from './pages/Errors/ServerError';
 import { ActivityLogs } from './pages/ActivityLogs/ActivityLogs';
 import LeadInquiriesPage from './pages/LeadInquiries/LeadInquiriesPage';
 import { AssignmentRequestsPage } from './pages/AssignmentRequests/AssignmentRequestsPage';
-import { NotificationsPage } from './pages/Notifications/NotificationsPage';
+import { InboxPage } from './pages/Notifications/InboxPage';
 
 function App() {
   return (
@@ -56,7 +56,7 @@ function App() {
               <Route path="/employees" element={<EmployeeManagement />} />
               <Route path="/lead-inquiries" element={<LeadInquiriesPage />} />
               <Route path="/assignment-requests" element={<ProtectedRoute requireAdmin><AssignmentRequestsPage /></ProtectedRoute>} />
-              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/inbox" element={<InboxPage />} />
               <Route path="/activity-logs" element={<ProtectedRoute requireAdmin><ActivityLogs /></ProtectedRoute>} />
             </Route>
 

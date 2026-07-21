@@ -18,7 +18,8 @@ import {
   ChevronDown,
   PhoneCall,
   ClipboardList,
-  Bell
+  Bell,
+  Inbox
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NotificationBell from '../components/NotificationBell';
@@ -56,7 +57,7 @@ const DashboardLayout = () => {
     { label: 'Tourist Visa', path: '/applicants?visa_type=tourist', icon: Plane },
     { label: 'Business Visa', path: '/applicants?visa_type=business', icon: Briefcase },
     { label: 'Lead Inquiries', path: '/lead-inquiries', icon: PhoneCall },
-    { label: 'Notifications', path: '/notifications', icon: Bell },
+    { label: 'Inbox', path: '/inbox', icon: Inbox },
   ];
 
   // Admin-only items
