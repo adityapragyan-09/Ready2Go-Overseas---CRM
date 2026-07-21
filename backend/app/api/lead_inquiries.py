@@ -31,6 +31,12 @@ from app.schemas.lead_inquiry import (
     LeadInquiryUpdate,
 )
 from app.services import lead_inquiry_service as service
+from app.services.duplicate_service import (
+    DuplicateCode,
+    DuplicatePolicy,
+    detect_duplicate,
+    normalize_incoming,
+)
 from app.services.lead_activity_service import get_activities, log_activity
 from app.services.notification_service import create_notification
 from app.utils.response import error_response, success_response
@@ -57,21 +63,61 @@ def create_lead_route(
     identity: LeadIdentity = Depends(resolve_lead_identity),
 ):
     """
-    Create a new lead inquiry.
+    Create a new lead inquiry with enterprise duplicate detection.
 
     Authentication:
     - CRM Users: JWT Bearer token
     - Website: CRM_API_KEY as Bearer token
 
-    Both use the same validation and business logic.
-    """
-    duplicates = service.check_duplicate(db, email=body.email, phone=body.phone, full_name=body.full_name)
+    Duplicate detection:
+    - Request idempotency (same request_id → return existing)
+    - Email match (normalized)
+    - Phone match (normalized)
+    - Email + Phone combination
 
+    Configurable policies: REJECT, ALLOW, FLAG, MERGE (placeholder)
+    """
+    # Normalize incoming data
+    normalized = normalize_incoming(body.model_dump())
+
+    # Enterprise duplicate detection
+    dup_result = detect_duplicate(
+        db,
+        email=normalized.get("email"),
+        phone=normalized.get("phone"),
+        request_id=body.request_id,
+    )
+
+    # Handle idempotency: same request_id → return existing record
+    if dup_result.code == DuplicateCode.REQUEST_ALREADY_PROCESSED:
+        log_activity(
+            db, lead_id=dup_result.matched_lead.id, action="DUPLICATE_IGNORED",
+            description=f"Duplicate submission ignored: request_id {body.request_id} already processed.",
+            created_by=identity.user_id,
+        )
+        return success_response(
+            message=dup_result.reason or "Request already processed.",
+            data=_serialize_lead(dup_result.matched_lead),
+        )
+
+    # Handle REJECT policy: existing lead with same email/phone
+    if dup_result.code == DuplicateCode.LEAD_ALREADY_EXISTS and dup_result.policy == DuplicatePolicy.REJECT:
+        log_activity(
+            db, lead_id=dup_result.matched_lead.id, action="DUPLICATE_REJECTED",
+            description=dup_result.reason,
+            created_by=identity.user_id,
+        )
+        return success_response(
+            message=dup_result.reason or "Lead already exists.",
+            data=_serialize_lead(dup_result.matched_lead),
+        )
+
+    # Create the lead
     lead = service.create_lead(
         db,
-        full_name=body.full_name,
-        email=body.email,
-        phone=body.phone,
+        full_name=normalized.get("full_name", body.full_name),
+        email=normalized.get("email"),
+        phone=normalized.get("phone"),
         visa_type=body.visa_type,
         preferred_country=body.preferred_country,
         message=body.message,
@@ -80,6 +126,21 @@ def create_lead_route(
         assigned_employee_id=body.assigned_employee_id,
         created_by=identity.user_id,
     )
+
+    # Log duplicate information if FLAG policy
+    if dup_result.code == DuplicateCode.POTENTIAL_DUPLICATE or (
+        dup_result.code == DuplicateCode.LEAD_ALREADY_EXISTS and dup_result.policy == DuplicatePolicy.FLAG
+    ):
+        log_activity(
+            db, lead_id=lead.id, action="POTENTIAL_DUPLICATE",
+            description=f"Potential duplicate: {dup_result.reason}" if dup_result.reason else "Potential duplicate detected.",
+            created_by=identity.user_id,
+        )
+        if dup_result.matched_lead:
+            logger.info(
+                "FLAG policy: lead %s created but matches %s via %s",
+                lead.lead_number, dup_result.matched_lead.lead_number, dup_result.reason or "unknown",
+            )
 
     # Notifications only for CRM users
     if identity.caller_type == CallerType.CRM_USER and identity.user_id:
@@ -100,20 +161,16 @@ def create_lead_route(
             pass  # Non-fatal
 
     logger.info(
-        "Lead created [caller=%s request_id=%s lead_number=%s source=%s ip=%s]",
+        "Lead created [caller=%s request_id=%s lead_number=%s source=%s code=%s ip=%s]",
         identity.caller_type.value, body.request_id, lead.lead_number, body.source,
+        dup_result.code.value,
         request.client.host if request.client else "unknown",
     )
 
     response_data = _serialize_lead(lead)
-    if duplicates:
-        response_data["duplicates"] = [
-            {"id": d.id, "lead_number": d.lead_number, "full_name": d.full_name, "status": d.status}
-            for d in duplicates
-        ]
 
     return success_response(
-        message="Lead inquiry created successfully." + (f" {len(duplicates)} duplicate(s) found." if duplicates else ""),
+        message="Lead inquiry created successfully.",
         data=response_data,
     )
 

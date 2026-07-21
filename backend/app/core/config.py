@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str
     SUPABASE_BUCKET: str = "ready2go-documents"
     CRM_API_KEY: str | None = None
+
+    # ── Duplicate Detection ─────────────────────
+    ENABLE_DUPLICATE_CHECK: bool = True
+    DUPLICATE_POLICY: str = "REJECT"
+    ENABLE_IDEMPOTENCY: bool = True
+
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 500
     UPLOAD_TIMEOUT_SECONDS: int = 600
