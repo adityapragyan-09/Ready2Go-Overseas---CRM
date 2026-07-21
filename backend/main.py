@@ -33,6 +33,7 @@ from app.api.activity_logs import router as activity_logs_router
 from app.api.lead_inquiries import router as lead_inquiries_router
 from app.api.lead_notes import router as lead_notes_router
 from app.api.lead_notes import notes_router as lead_notes_crud_router
+from app.api.assignment_requests import router as assignment_requests_router
 from app.core.config import settings
 from app.core.logging import logger
 from app.middlewares.cors import setup_cors
@@ -127,6 +128,7 @@ app.include_router(activity_logs_router, prefix=f"{settings.API_PREFIX}/activity
 app.include_router(lead_inquiries_router, prefix=f"{settings.API_PREFIX}/lead-inquiries", tags=["Lead Inquiries"])
 app.include_router(lead_notes_router, prefix=f"{settings.API_PREFIX}/lead-inquiries/{{lead_id}}/notes", tags=["Lead Notes"])
 app.include_router(lead_notes_crud_router, prefix=f"{settings.API_PREFIX}/notes", tags=["Lead Notes"])
+app.include_router(assignment_requests_router, prefix=f"{settings.API_PREFIX}/assignment-requests", tags=["Assignment Requests"])
 
 # ── Health / Liveness / Readiness ────────────────
 
