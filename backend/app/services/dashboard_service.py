@@ -15,6 +15,7 @@ from app.models.progress import ProgressHistory
 from app.models.message import Message
 from app.models.notification import Notification
 from app.models.activity_log import ActivityLog
+from app.models.assignment_request import AssignmentRequest
 from app.models.lead_inquiry import LeadInquiry
 from app.services.notification_service import get_unread_count
 
@@ -71,6 +72,8 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
     new_leads = db.query(func.count(LeadInquiry.id)).filter(LeadInquiry.status == "NEW").scalar() or 0
     todays_leads = db.query(func.count(LeadInquiry.id)).filter(LeadInquiry.created_at >= today_start).scalar() or 0
     converted_leads = db.query(func.count(LeadInquiry.id)).filter(LeadInquiry.status == "CONVERTED").scalar() or 0
+    unassigned_leads = db.query(func.count(LeadInquiry.id)).filter(LeadInquiry.assigned_employee_id.is_(None)).scalar() or 0
+    pending_assignments = db.query(func.count(AssignmentRequest.id)).filter(AssignmentRequest.status == "PENDING").scalar() or 0
 
     is_admin = current_user.role == "admin"
     unread_notifs = get_unread_count(db, current_user.id, is_admin)
@@ -96,6 +99,8 @@ def get_summary(db: Session, current_user: User) -> Dict[str, Any]:
         "new_leads": new_leads,
         "todays_leads": todays_leads,
         "converted_leads": converted_leads,
+        "unassigned_leads": unassigned_leads,
+        "pending_assignments": pending_assignments,
     }
 
 

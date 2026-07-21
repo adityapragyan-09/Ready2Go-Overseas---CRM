@@ -28,6 +28,8 @@ class DashboardSummaryResponse(BaseModel):
     new_leads: int = 0
     todays_leads: int = 0
     converted_leads: int = 0
+    unassigned_leads: int = 0
+    pending_assignments: int = 0
 
 
 class KeyValueMetric(BaseModel):
