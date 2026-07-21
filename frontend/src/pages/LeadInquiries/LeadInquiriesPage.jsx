@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, RefreshCw, Phone, Mail, Globe } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Search, RefreshCw, Phone, Mail, Globe, ChevronDown, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../../config/api';
+import { useAuth } from '../../hooks/useAuth';
 import leadInquiryService from '../../services/leadInquiryService';
 import Card from '../../components/Card';
 import PageHeader from '../../components/PageHeader';
@@ -18,6 +20,9 @@ const STATUS_COLORS = {
 };
 
 export const LeadInquiriesPage = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -26,6 +31,29 @@ export const LeadInquiriesPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Assignment state
+  const [employees, setEmployees] = useState([]);
+  const [assigningLead, setAssigningLead] = useState(null);
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assignLoading, setAssignLoading] = useState({});
+
+  // Fetch employees for admin assignment dropdown
+  const fetchEmployees = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const res = await api.get('/employees', { params: { page_size: 100 } });
+      if (res.data?.success) {
+        setEmployees((res.data.data.items || []).filter(e => e.is_active && e.role !== 'admin'));
+      }
+    } catch {
+      // Silent fail — assignment dropdown unavailable
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
 
   const fetchLeads = async () => {
     try {
@@ -49,6 +77,36 @@ export const LeadInquiriesPage = () => {
   useEffect(() => {
     fetchLeads();
   }, [page, statusFilter]);
+
+  const handleDirectAssign = async (leadId, employeeId) => {
+    setAssignLoading(prev => ({ ...prev, [leadId]: true }));
+    try {
+      const res = await api.post('/assignment-requests/direct-assign', { lead_id: leadId, employee_id: employeeId });
+      if (res.data?.success) {
+        toast.success('Lead assigned successfully.');
+        setAssigningLead(null);
+        setAssignSearch('');
+        // Update the lead in local state without full reload
+        setLeads(prev => prev.map(l =>
+          l.id === leadId ? {
+            ...l,
+            assigned_employee_id: employeeId,
+            assigned_employee_name: employeeId
+              ? (employees.find(e => e.id === employeeId)?.full_name || 'Assigned')
+              : null,
+          } : l
+        ));
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to assign lead.');
+    } finally {
+      setAssignLoading(prev => ({ ...prev, [leadId]: false }));
+    }
+  };
+
+  const filteredEmployees = employees
+    .filter(e => !assignSearch || e.full_name?.toLowerCase().includes(assignSearch.toLowerCase()) || e.email?.toLowerCase().includes(assignSearch.toLowerCase()))
+    .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -145,7 +203,79 @@ export const LeadInquiriesPage = () => {
                         {lead.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-xs text-slate-600">{lead.assigned_employee_name || '—'}</td>
+                    <td className="py-3 px-4 text-xs">
+                      {isAdmin ? (
+                        <div className="relative">
+                          {assigningLead === lead.id ? (
+                            <div className="flex flex-col gap-1.5 min-w-[200px]">
+                              <div className="relative">
+                                <Search size={12} className="absolute left-2 top-2 text-slate-400" />
+                                <input
+                                  type="text"
+                                  value={assignSearch}
+                                  onChange={(e) => setAssignSearch(e.target.value)}
+                                  placeholder="Search employee..."
+                                  className="w-full pl-7 pr-2 py-1.5 border border-slate-200 rounded-lg text-[10px] outline-none focus:border-brand-blue"
+                                  autoFocus
+                                />
+                              </div>
+                              <div className="max-h-32 overflow-y-auto border border-slate-100 rounded-lg bg-white shadow-sm">
+                                <button
+                                  onClick={() => { setAssigningLead(null); setAssignSearch(''); }}
+                                  className="w-full text-left px-2.5 py-2 text-[10px] text-slate-400 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                  <X size={10} /> Unassign
+                                </button>
+                                {filteredEmployees.length === 0 ? (
+                                  <p className="px-2.5 py-2 text-[10px] text-slate-400">No employees found</p>
+                                ) : filteredEmployees.map(emp => (
+                                  <button
+                                    key={emp.id}
+                                    onClick={() => handleDirectAssign(lead.id, emp.id)}
+                                    disabled={assignLoading[lead.id]}
+                                    className="w-full text-left px-2.5 py-2 text-[10px] hover:bg-brand-blue/5 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                  >
+                                    <div className="w-6 h-6 rounded-full bg-brand-blue/10 flex items-center justify-center text-brand-blue font-bold text-[8px] shrink-0">
+                                      {emp.full_name?.substring(0, 2).toUpperCase() || 'EM'}
+                                    </div>
+                                    <div className="truncate">
+                                      <p className="font-semibold text-slate-700 truncate">{emp.full_name}</p>
+                                      <p className="text-[8px] text-slate-400 truncate">{emp.email}</p>
+                                    </div>
+                                    {lead.assigned_employee_id === emp.id && <Check size={10} className="text-emerald-500 shrink-0" />}
+                                  </button>
+                                ))}
+                              </div>
+                              {assignLoading[lead.id] && <div className="w-4 h-4 border-2 border-brand-orange border-t-transparent rounded-full animate-spin mx-auto" />}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              {lead.assigned_employee_name ? (
+                                <>
+                                  <span className="text-xs text-slate-700 font-semibold">{lead.assigned_employee_name}</span>
+                                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">Assigned</span>
+                                  <button
+                                    onClick={() => { setAssigningLead(lead.id); setAssignSearch(''); }}
+                                    className="text-[9px] text-brand-blue hover:text-brand-orange font-bold transition-colors"
+                                  >
+                                    Change
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => { setAssigningLead(lead.id); setAssignSearch(''); }}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-500 font-semibold hover:border-brand-blue hover:text-brand-blue transition-all"
+                                >
+                                  <Plus size={10} /> Assign
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-600">{lead.assigned_employee_name || '—'}</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-[10px] text-slate-400">{new Date(lead.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
