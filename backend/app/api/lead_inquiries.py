@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import LeadIdentity, get_current_user, resolve_lead_identity
+from app.core.enums import CallerType
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.lead_inquiry import (
@@ -81,7 +82,7 @@ def create_lead_route(
     )
 
     # Notifications only for CRM users
-    if identity.caller_type == "crm_user" and identity.user_id:
+    if identity.caller_type == CallerType.CRM_USER and identity.user_id:
         try:
             create_notification(
                 db,
@@ -100,7 +101,7 @@ def create_lead_route(
 
     logger.info(
         "Lead created [caller=%s request_id=%s lead_number=%s source=%s ip=%s]",
-        identity.caller_type, body.request_id, lead.lead_number, body.source,
+        identity.caller_type.value, body.request_id, lead.lead_number, body.source,
         request.client.host if request.client else "unknown",
     )
 

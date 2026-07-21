@@ -20,6 +20,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.enums import CallerType
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -122,9 +123,9 @@ from dataclasses import dataclass
 @dataclass
 class LeadIdentity:
     """Represents the identity of the caller for lead creation."""
-    caller_type: str  # "crm_user" or "website"
-    user_id: int | None = None  # Set for CRM users
-    user: User | None = None  # Set for CRM users
+    caller_type: CallerType
+    user_id: int | None = None
+    user: User | None = None
 
 
 async def resolve_lead_identity(
@@ -157,8 +158,7 @@ async def resolve_lead_identity(
 
     # Try JWT first (CRM user)
     if settings.CRM_API_KEY and token == settings.CRM_API_KEY:
-        # API key match — website caller
-        return LeadIdentity(caller_type="website")
+        return LeadIdentity(caller_type=CallerType.WEBSITE)
 
     # JWT authentication
     payload = decode_access_token(token)
@@ -196,4 +196,4 @@ async def resolve_lead_identity(
             detail="Account has been deactivated.",
         )
 
-    return LeadIdentity(caller_type="crm_user", user_id=user.id, user=user)
+    return LeadIdentity(caller_type=CallerType.CRM_USER, user_id=user.id, user=user)
