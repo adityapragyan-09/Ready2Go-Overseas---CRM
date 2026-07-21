@@ -22,6 +22,7 @@ class LeadInquiry(Base):
     uuid: Mapped[str] = mapped_column(
         String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True
     )
+    request_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     lead_number: Mapped[str] = mapped_column(
         String(20), unique=True, nullable=False, index=True,
     )

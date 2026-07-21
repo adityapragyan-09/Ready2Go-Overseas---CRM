@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
     SUPABASE_BUCKET: str = "ready2go-documents"
+    CRM_API_KEY: str | None = None
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 500
     UPLOAD_TIMEOUT_SECONDS: int = 600

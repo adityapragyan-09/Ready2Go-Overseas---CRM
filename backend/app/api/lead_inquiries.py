@@ -15,10 +15,10 @@ Endpoints:
     POST   /{id}/convert              — Convert lead to applicant (stub - 501)
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, verify_api_key
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.lead_inquiry import (
@@ -28,11 +28,12 @@ from app.schemas.lead_inquiry import (
     LeadInquiryResponse,
     LeadInquiryStatusUpdate,
     LeadInquiryUpdate,
+    WebsiteLeadCreate,
 )
 from app.services import lead_inquiry_service as service
 from app.services.lead_activity_service import get_activities, log_activity
 from app.services.notification_service import create_notification
-from app.utils.response import success_response
+from app.utils.response import error_response, success_response
 
 router = APIRouter()
 
@@ -42,7 +43,48 @@ def _serialize_lead(lead) -> dict:
     data = LeadInquiryResponse.model_validate(lead).model_dump()
     if lead.assigned_employee:
         data["assigned_employee_name"] = lead.assigned_employee.name
+    data["request_id"] = lead.request_id
     return data
+
+
+# ── POST /website ───────────────────────────
+# Public endpoint for website integration (API-key auth)
+
+@router.post("/website", status_code=status.HTTP_201_CREATED)
+def create_lead_from_website(
+    body: WebsiteLeadCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key),
+):
+    """Create a lead inquiry from the public website. Uses API-key authentication."""
+    lead = service.create_lead(
+        db,
+        full_name=body.full_name,
+        email=body.email,
+        phone=body.phone,
+        visa_type=body.visa_type,
+        preferred_country=body.preferred_country,
+        message=body.message,
+        source=body.source or "Website",
+        request_id=body.request_id,
+    )
+
+    logger.info(
+        "Website lead created [request_id=%s lead_number=%s full_name=%s source=%s ip=%s]",
+        body.request_id, lead.lead_number, lead.full_name, body.source,
+        request.client.host if request.client else "unknown",
+    )
+
+    return success_response(
+        message="Lead inquiry created successfully.",
+        data={
+            "lead_id": lead.id,
+            "lead_number": lead.lead_number,
+            "status": lead.status,
+            "request_id": body.request_id,
+        },
+    )
 
 
 # ── POST / ──────────────────────────────────
@@ -58,7 +100,6 @@ def create_lead_route(
     Requires JWT authentication.
     Generates automatic notification on creation.
     """
-    # Check for duplicates
     duplicates = service.check_duplicate(db, email=body.email, phone=body.phone, full_name=body.full_name)
 
     lead = service.create_lead(
@@ -70,6 +111,7 @@ def create_lead_route(
         preferred_country=body.preferred_country,
         message=body.message,
         source=body.source,
+        request_id=body.request_id,
         assigned_employee_id=body.assigned_employee_id,
         created_by=current_user.id,
     )

@@ -8,8 +8,45 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from app.constants.lead_inquiry import ALL_SOURCES, ALL_STATUSES
 
 
+class WebsiteLeadCreate(BaseModel):
+    """Schema for lead creation from the public website (API-key auth)."""
+    request_id: str | None = Field(default=None, max_length=36, description="Client-generated UUIDv4")
+    full_name: str = Field(..., min_length=1, max_length=150)
+    email: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=20)
+    visa_type: str = Field(default="student", max_length=30, description="Visa type: student, visit, tourist, business")
+    preferred_country: str | None = Field(default=None, max_length=100)
+    message: str | None = Field(default=None, max_length=5000)
+    source: str = Field(default="Website", max_length=30)
+
+    @field_validator("request_id")
+    @classmethod
+    def validate_request_id(cls, v: str | None) -> str | None:
+        if v is not None:
+            import uuid
+            try:
+                uuid.UUID(v)
+            except ValueError:
+                raise ValueError("request_id must be a valid UUIDv4 string.")
+        return v
+
+    @field_validator("visa_type")
+    @classmethod
+    def validate_visa_type(cls, v: str) -> str:
+        allowed = ["student", "visit", "tourist", "business"]
+        if v.lower() not in allowed:
+            raise ValueError(f"Invalid visa type. Allowed: {', '.join(allowed)}")
+        return v.lower()
+
+    @field_validator("full_name")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip()
+
+
 class LeadInquiryCreate(BaseModel):
-    """Schema for creating a new lead inquiry."""
+    """Schema for creating a new lead inquiry (CRM internal)."""
+    request_id: str | None = Field(default=None, max_length=36)
     full_name: str = Field(..., min_length=1, max_length=150)
     email: str | None = Field(default=None, max_length=120)
     phone: str | None = Field(default=None, max_length=20)

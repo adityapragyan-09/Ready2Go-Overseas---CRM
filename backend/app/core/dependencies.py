@@ -15,7 +15,7 @@ Usage:
         ...
 """
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -114,3 +114,28 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
             detail="Admin access required.",
         )
     return user
+
+
+async def verify_api_key(authorization: str = Header(..., alias="Authorization")) -> str:
+    """
+    Validate the CRM API key for server-to-server requests.
+    Expected format: Authorization: Bearer <CRM_API_KEY>
+    Used by the public website integration endpoint.
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format.",
+        )
+    api_key = authorization.replace("Bearer ", "")
+    if not settings.CRM_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="CRM_API_KEY not configured.",
+        )
+    if api_key != settings.CRM_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key.",
+        )
+    return api_key

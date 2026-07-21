@@ -59,24 +59,25 @@ def create_lead(
     preferred_country: str | None = None,
     message: str | None = None,
     source: str = "WEBSITE",
+    request_id: str | None = None,
     assigned_employee_id: int | None = None,
     created_by: int | None = None,
 ) -> LeadInquiry:
     """
     Create a new lead inquiry.
     Auto-generates lead_number and UUID.
-    Returns existing duplicates if detected.
+    Accepts optional request_id from website integration.
     """
     # Check duplicates
     duplicates = check_duplicate(db, email=email, phone=phone)
     if duplicates:
-        dup_info = [{"id": d.id, "lead_number": d.lead_number, "full_name": d.full_name, "status": d.status} for d in duplicates]
-        logger.info("Duplicate lead detected: email=%s phone=%s matches=%d", email, phone, len(duplicates))
+        logger.info("Duplicate lead detected: email=%s phone=%s matches=%d request_id=%s", email, phone, len(duplicates), request_id)
 
     lead_number = _generate_lead_number(db)
 
     lead = LeadInquiry(
         lead_number=lead_number,
+        request_id=request_id,
         full_name=full_name,
         email=email.lower() if email else None,
         phone=phone,
