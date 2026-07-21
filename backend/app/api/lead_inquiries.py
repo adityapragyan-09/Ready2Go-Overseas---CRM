@@ -92,11 +92,11 @@ def create_lead_route(
     if dup_result.code == DuplicateCode.REQUEST_ALREADY_PROCESSED:
         log_activity(
             db, lead_id=dup_result.matched_lead.id, action="DUPLICATE_IGNORED",
-            description=f"Duplicate submission ignored: request_id {body.request_id} already processed.",
+            description=f"Duplicate ignored: {dup_result.reason_detail or 'request_id already processed'}.",
             created_by=identity.user_id,
         )
         return success_response(
-            message=dup_result.reason or "Request already processed.",
+            message=dup_result.reason_detail or "Request already processed.",
             data=_serialize_lead(dup_result.matched_lead),
         )
 
@@ -104,11 +104,11 @@ def create_lead_route(
     if dup_result.code == DuplicateCode.LEAD_ALREADY_EXISTS and dup_result.policy == DuplicatePolicy.REJECT:
         log_activity(
             db, lead_id=dup_result.matched_lead.id, action="DUPLICATE_REJECTED",
-            description=dup_result.reason,
+            description=dup_result.reason_detail or f"Duplicate: {dup_result.reason.value if dup_result.reason else 'unknown'}",
             created_by=identity.user_id,
         )
         return success_response(
-            message=dup_result.reason or "Lead already exists.",
+            message=dup_result.reason_detail or "Lead already exists.",
             data=_serialize_lead(dup_result.matched_lead),
         )
 
@@ -133,13 +133,14 @@ def create_lead_route(
     ):
         log_activity(
             db, lead_id=lead.id, action="POTENTIAL_DUPLICATE",
-            description=f"Potential duplicate: {dup_result.reason}" if dup_result.reason else "Potential duplicate detected.",
+            description=dup_result.reason_detail or f"Potential duplicate: {dup_result.reason.value if dup_result.reason else 'unknown'}.",
             created_by=identity.user_id,
         )
         if dup_result.matched_lead:
             logger.info(
                 "FLAG policy: lead %s created but matches %s via %s",
-                lead.lead_number, dup_result.matched_lead.lead_number, dup_result.reason or "unknown",
+                lead.lead_number, dup_result.matched_lead.lead_number,
+                dup_result.reason.value if dup_result.reason else "unknown",
             )
 
     # Notifications only for CRM users

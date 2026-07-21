@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.constants.lead_inquiry import NEW as STATUS_NEW
 from app.models.lead_inquiry import LeadInquiry
 from app.models.user import User
+from app.services.duplicate_service import normalize_email, normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,8 @@ def create_lead(
         full_name=full_name,
         email=email.lower() if email else None,
         phone=phone,
+        normalized_email=normalize_email(email),
+        normalized_phone=normalize_phone(phone),
         visa_type=visa_type,
         preferred_country=preferred_country,
         message=message,
