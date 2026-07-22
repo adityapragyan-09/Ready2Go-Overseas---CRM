@@ -283,35 +283,6 @@ export const Dashboard = () => {
           </div>
         </Card>
 
-        <Card className="hover:scale-[1.02] transition-transform duration-300">
-          <div className="flex justify-between items-start">
-            <div>
-              <span className="text-xs font-bold text-slate-400 uppercase">Documents Stored</span>
-              <h3 className="text-3xl font-extrabold text-slate-800 font-display mt-1">{summary?.documents_uploaded || 0}</h3>
-            </div>
-            <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
-              <FileText className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 mt-4 text-[11px] text-slate-500">
-            <span className="font-semibold text-amber-600">{summary?.documents_pending || 0} Pending upload</span>
-          </div>
-        </Card>
-
-        <Card className="hover:scale-[1.02] transition-transform duration-300">
-          <div className="flex justify-between items-start">
-            <div>
-              <span className="text-xs font-bold text-slate-400 uppercase">Alert Badges</span>
-              <h3 className="text-3xl font-extrabold text-slate-800 font-display mt-1">{summary?.unread_notifications || 0}</h3>
-            </div>
-            <div className="p-3 rounded-2xl bg-brand-orange/10 text-brand-orange">
-              <Bell className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 mt-4 text-[11px] text-slate-500">
-            <span>Advisor Action Queue</span>
-          </div>
-        </Card>
       </div>
 
       {/* Mini visa breakdown grid */}

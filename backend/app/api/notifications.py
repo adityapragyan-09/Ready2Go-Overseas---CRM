@@ -48,11 +48,14 @@ def get_unread_count_route(
 def list_notifications_route(
     page: int = Query(default=1, ge=1),
     page_size: int | None = Query(default=None, ge=1),
+    module: str | None = Query(default=None, description="Filter by module (applicant, assignment, employee, document, chat, internal_chat, authentication)"),
+    search: str | None = Query(default=None, description="Search in title and message"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Retrieve paginated notifications visible to the authenticated user.
+    Optional module filter and search.
     """
     is_admin = current_user.role == "admin"
     total, items = notification_service.get_latest_notifications(
@@ -61,6 +64,8 @@ def list_notifications_route(
         is_admin=is_admin,
         page=page,
         page_size=page_size,
+        module_filter=module,
+        search=search,
     )
     
     serialized_items = [NotificationOut.model_validate(n).model_dump(by_alias=True) for n in items]

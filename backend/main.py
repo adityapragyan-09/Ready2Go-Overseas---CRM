@@ -202,6 +202,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             errors[field] = []
         errors[field].append(error["msg"])
 
+    # Build human-friendly message from validation errors
+    friendly_messages = []
+    for field, msgs in errors.items():
+        for msg in msgs:
+            friendly_messages.append(f"{field}: {msg}")
+    friendly_message = "; ".join(friendly_messages) if friendly_messages else "Please check your input and try again."
+
     logger.warning(
         "Validation error",
         extra={
@@ -214,7 +221,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=error_response(
-            "Validation failed.",
+            friendly_message,
             errors=errors,
             request_id=request_id,
             error="VALIDATION_ERROR",

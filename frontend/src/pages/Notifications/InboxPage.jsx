@@ -160,7 +160,18 @@ export const InboxPage = () => {
                 return (
                   <div key={n.id}
                     className={`group flex items-start gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-sm ${n.is_read ? 'bg-white border-slate-100' : 'bg-brand-blue/5 border-brand-blue/20'}`}
-                    onClick={() => !n.is_read && handleMarkRead(n.id)}
+                    onClick={() => {
+                      if (n.reference_type === 'lead' && n.reference_id) {
+                        navigate(`/lead-inquiries`);
+                      } else if (n.reference_type === 'document' && n.reference_id) {
+                        navigate(`/applicants`);
+                      } else if (n.reference_type === 'user') {
+                        navigate(`/employees`);
+                      } else {
+                        navigate(`/inbox`);
+                      }
+                      if (!n.is_read) handleMarkRead(n.id);
+                    }}
                   >
                     <div className={`p-2.5 rounded-full shrink-0 ${n.is_read ? 'bg-slate-50 text-slate-400' : 'bg-brand-blue/10 text-brand-blue'}`}>
                       <Icon size={18} />

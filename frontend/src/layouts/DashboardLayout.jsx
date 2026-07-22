@@ -22,7 +22,7 @@ import {
   Inbox
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import NotificationBell from '../components/NotificationBell';
+import api from '../config/api';
 
 const DashboardLayout = () => {
   const { user, logout } = useAuth();
@@ -30,6 +30,7 @@ const DashboardLayout = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const dropdownRef = useRef(null);
 
   const handleLogout = async () => {
@@ -47,6 +48,19 @@ const DashboardLayout = () => {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch unread inbox count with polling
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await api.get('/notifications/unread-count');
+        if (res.data?.success) setUnreadCount(res.data.data.unread_count || 0);
+      } catch { /* silent */ }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const navItems = [
@@ -205,9 +219,16 @@ const DashboardLayout = () => {
             ))}
           </div>
 
-          {/* Notification Bell + User Profile dropdown menu */}
+          {/* Inbox icon + User Profile dropdown menu */}
           <div className="flex items-center gap-2">
-            <NotificationBell />
+            <Link to="/inbox" className="relative p-2 rounded-xl hover:bg-slate-50 transition-colors" title="Inbox">
+              <Inbox className="h-5 w-5 text-slate-600" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-brand-orange text-white text-[8px] font-bold flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Link>
             <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}

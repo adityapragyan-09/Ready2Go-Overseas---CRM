@@ -77,11 +77,12 @@ def get_latest_notifications(
     is_admin: bool,
     page: int = 1,
     page_size: int | None = None,
+    module_filter: str | None = None,
+    search: str | None = None,
 ) -> tuple[int, list[Notification]]:
     """
     Retrieve paginated notifications ordered by created_at DESC.
-    Admins: see own targeted OR system-wide/system module notifications.
-    Employees: see own targeted notifications only.
+    Supports optional module filter and search.
     """
     if is_admin:
         filter_cond = or_(
@@ -92,8 +93,33 @@ def get_latest_notifications(
         filter_cond = Notification.recipient_user_id == user_id
 
     query = db.query(Notification).filter(filter_cond)
-    total = query.count()
 
+    if module_filter:
+        module_map = {
+            "applicant": "applicant",
+            "assignment": "employee",
+            "employee": "employee",
+            "document": "document",
+            "chat": "chat",
+            "internal_chat": "chat",
+            "authentication": "authentication",
+            "progress": "progress",
+            "system": "authentication",
+        }
+        db_module = module_map.get(module_filter)
+        if db_module:
+            query = query.filter(Notification.module == db_module)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Notification.title.ilike(search_term),
+                Notification.message.ilike(search_term),
+            )
+        )
+
+    total = query.count()
     limit = page_size or settings.DEFAULT_PAGE_SIZE
     offset = (page - 1) * limit
 
