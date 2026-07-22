@@ -14,9 +14,8 @@ from app.core.dependencies import require_admin
 from app.db.session import get_db
 from app.models.activity_log import ActivityLog
 from app.models.user import User
-from app.schemas.activity_log import ActivityLogResponse
 from app.services import employee_service
-from app.utils.response import error_response, success_response
+from app.utils.response import success_response
 
 router = APIRouter()
 

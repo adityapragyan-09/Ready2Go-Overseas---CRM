@@ -271,37 +271,6 @@ def update_employee_status(db: Session, employee_id: int, is_active: bool, actio
     return user
 
 
-def reset_employee_password(db: Session, employee_id: int, new_password: str) -> User:
-    """Hash new password and update user record."""
-    user = get_employee_by_id(db, employee_id)
-    user.password_hash = hash_password(new_password)
-    try:
-        db.commit()
-        db.refresh(user)
-    except Exception:
-        db.rollback()
-        raise
-
-    # Notification trigger: Password reset
-    try:
-        from app.services.notification_service import create_notification
-        create_notification(
-            db,
-            title="Password Reset",
-            message=f"Password for employee '{user.name}' has been reset by admin.",
-            type="warning",
-            module="employee",
-            priority="high",
-            recipient_user_id=employee_id,
-            reference_type="user",
-            reference_id=employee_id,
-        )
-    except Exception:
-        pass
-
-    return user
-
-
 def list_activity_logs(
     db: Session,
     user_id: int | None = None,

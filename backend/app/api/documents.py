@@ -15,7 +15,6 @@ Endpoints:
 
 import io
 import zipfile
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -109,9 +108,8 @@ def download_document_route(
     """
     signed_url = generate_document_download(db, document_id)
     # Fetch document metadata for response body
-    from app.services.document_service import get_document_by_id
     document = get_document_by_id(db, document_id)
-    
+
     download_data = DocumentDownloadResponse(
         document_code=document.document_code,
         original_file_name=document.original_file_name,

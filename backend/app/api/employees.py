@@ -26,8 +26,6 @@ from app.schemas.employee import (
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy.exc import OperationalError, ProgrammingError
-
 from app.models.applicant import Applicant
 from app.services import employee_service
 from app.services.auth_service import reset_employee_password

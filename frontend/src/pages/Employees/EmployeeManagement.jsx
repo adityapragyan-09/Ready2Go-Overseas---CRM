@@ -15,6 +15,7 @@ import Input from '../../components/Input';
 import PageHeader from '../../components/PageHeader';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import EmptyState from '../../components/EmptyState';
 
 // ── 1. Status Badge Component ────────────────────
 export const EmployeeStatusBadge = ({ isActive }) => {

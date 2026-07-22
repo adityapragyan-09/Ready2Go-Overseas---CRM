@@ -1,6 +1,5 @@
 import React from 'react';
 import { Filter, RotateCcw } from 'lucide-react';
-import Button from './Button';
 
 const visaTypes = [
   { value: 'student', label: 'Student Visa' },

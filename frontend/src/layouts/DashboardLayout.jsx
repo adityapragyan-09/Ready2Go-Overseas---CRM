@@ -2,23 +2,22 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import Logo from '../assets/logo/Logo';
-import { 
-  LayoutDashboard, 
-  Users, 
-  GraduationCap, 
-  Compass, 
-  Plane, 
-  Briefcase, 
-  LogOut, 
-  Menu, 
-  X, 
+import {
+  LayoutDashboard,
+  Users,
+  GraduationCap,
+  Compass,
+  Plane,
+  Briefcase,
+  LogOut,
+  Menu,
+  X,
   User as UserIcon,
   Shield,
   Activity,
   ChevronDown,
   PhoneCall,
   ClipboardList,
-  Bell,
   Inbox
 } from 'lucide-react';
 import toast from 'react-hot-toast';

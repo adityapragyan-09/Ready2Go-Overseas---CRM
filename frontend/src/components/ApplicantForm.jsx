@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Save, X, GraduationCap, Compass, Plane, Briefcase } from 'lucide-react';
+import { Save, GraduationCap, Compass, Plane, Briefcase } from 'lucide-react';
 import Input from './Input';
 import Button from './Button';
 

@@ -8,13 +8,6 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.dashboard import (
-    DashboardSummaryResponse,
-    DashboardChartsResponse,
-    DashboardRecentResponse,
-    DashboardEmployeeResponse,
-    DashboardSystemResponse,
-)
 from app.services import dashboard_service
 from app.utils.response import success_response
 

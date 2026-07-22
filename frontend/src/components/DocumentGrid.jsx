@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import documentService from '../services/documentService';
-import StatusBadge from './StatusBadge';
 import ConfirmationModal from './ConfirmationModal';
 
 // Config maps document_type to icons and style classes

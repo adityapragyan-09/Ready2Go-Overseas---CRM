@@ -6,7 +6,7 @@ Router: /api/v1/assignment-requests
 
 import logging
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_admin
@@ -180,9 +180,8 @@ def cancel_request_route(
 
 # ── POST /direct-assign — Admin direct assign ─
 
-from fastapi import HTTPException
+# ── POST /direct-assign — Admin direct assign ─
 
-@router.post("/direct-assign")
 def direct_assign_route(
     body: dict,
     db: Session = Depends(get_db),

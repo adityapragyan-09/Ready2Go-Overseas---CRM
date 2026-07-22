@@ -7,9 +7,7 @@ The password_hash is never included in any output schema.
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
-
-from app.constants import EMPLOYEE, ALL_ROLES
+from pydantic import BaseModel
 
 
 class UserOut(BaseModel):
@@ -25,19 +23,3 @@ class UserOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
-class UserCreate(BaseModel):
-    """Schema for creating a new user (employee management)."""
-    name: str = Field(min_length=1, max_length=120)
-    email: EmailStr
-    phone: str | None = None
-    password: str = Field(min_length=6, max_length=128)
-    role: str = Field(default=EMPLOYEE, pattern=f"^({'|'.join(ALL_ROLES)})$")
-
-
-class UserUpdate(BaseModel):
-    """Schema for updating an existing user."""
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    phone: str | None = None
-    role: str | None = Field(default=None, pattern=f"^({'|'.join(ALL_ROLES)})$")
-    is_active: bool | None = None

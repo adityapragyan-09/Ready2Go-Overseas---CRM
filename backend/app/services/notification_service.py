@@ -245,23 +245,6 @@ def delete_notification(db: Session, notification_id: int, user_id: int, is_admi
         raise
 
 
-def delete_old_notifications(db: Session, days_limit: int = 30) -> int:
-    """Prune/delete read notifications older than the threshold limit (e.g. 30 days)."""
-    threshold_date = datetime.now(timezone.utc) - timedelta(days=days_limit)
-    
-    deleted_count = (
-        db.query(Notification)
-        .filter(and_(Notification.is_read == True, Notification.created_at < threshold_date))
-        .delete()
-    )
-    try:
-        db.commit()
-        return deleted_count
-    except Exception:
-        db.rollback()
-        raise
-
-
 def delete_notifications_batch(
     db: Session,
     user_id: int | None = None,
@@ -305,24 +288,6 @@ def delete_notifications_batch(
     remaining_count = base_query.count()
     return deleted_count, remaining_count
 
-
-def purge_all_notifications_batched(
-    db: Session,
-    batch_size: int = 25,
-) -> tuple[int, int]:
-    """
-    Purge all notifications from the table in batches of `batch_size`.
-    Returns tuple of (total_deleted, remaining_count).
-    """
-    total_deleted = 0
-    while True:
-        deleted, remaining = delete_notifications_batch(
-            db, user_id=None, is_admin=True, batch_size=batch_size
-        )
-        total_deleted += deleted
-        if deleted == 0 or remaining == 0:
-            break
-    return total_deleted, remaining
 
 
 def verify_notification_cleanup(

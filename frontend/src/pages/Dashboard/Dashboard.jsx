@@ -3,11 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users,
   FileText,
-  Bell,
   Search,
   Plus,
   UserPlus,
-  RefreshCw,
   Activity,
   Database,
   Cloud,
@@ -17,7 +15,6 @@ import {
   Eye,
   X,
   MessageSquare,
-  FileDown
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../context/NotificationContext';
@@ -49,11 +46,9 @@ export const Dashboard = () => {
   const [selectedAdvisor, setSelectedAdvisor] = useState(null);
   const [advisorApplicants, setAdvisorApplicants] = useState([]);
   const [isLoadingAdvisor, setIsLoadingAdvisor] = useState(false);
-  const [selectedDeleteDate, setSelectedDeleteDate] = useState('');
   const [myLeads, setMyLeads] = useState([]);
   const [myLeadsLoading, setMyLeadsLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadAdvisorApplicants = async (employeeId, name) => {
     if (!employeeId) return;

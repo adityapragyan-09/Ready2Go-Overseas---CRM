@@ -124,8 +124,3 @@ def reset_employee_password(db: Session, employee_id: int, new_password: str) ->
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password.")
 
     return user
-
-
-def get_user_by_id(db: Session, user_id: int) -> User | None:
-    """Fetch a single user by primary key."""
-    return db.query(User).filter(User.id == user_id).first()

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, RefreshCw, Phone, Mail, Globe, ChevronDown, Check, X } from 'lucide-react';
+import { Plus, Search, RefreshCw, Phone, Mail, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../config/api';
 import { useAuth } from '../../hooks/useAuth';
