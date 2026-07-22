@@ -203,12 +203,20 @@ def update_lead(db: Session, lead_id: int, update_data: dict, updated_by: int | 
 
 
 def delete_lead(db: Session, lead_id: int) -> dict:
-    """Permanently delete a lead inquiry."""
+    """Permanently delete a lead inquiry and all associated records."""
+    from app.models.lead_activity import LeadActivity
+    from app.models.lead_note import LeadNote
+    from app.models.assignment_request import AssignmentRequest
+
     lead = get_lead(db, lead_id)
     name = lead.full_name
     lead_number = lead.lead_number
 
     try:
+        # Delete child records first to avoid FK violations
+        db.query(LeadActivity).filter(LeadActivity.lead_id == lead_id).delete()
+        db.query(LeadNote).filter(LeadNote.lead_id == lead_id).delete()
+        db.query(AssignmentRequest).filter(AssignmentRequest.lead_id == lead_id).delete()
         db.delete(lead)
         db.commit()
     except Exception:
