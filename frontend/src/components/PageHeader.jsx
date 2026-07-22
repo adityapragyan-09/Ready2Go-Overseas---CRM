@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 /**
  * Reusable header component for all CRM module pages carrying breadcrumbs and CTA buttons.
@@ -21,9 +22,9 @@ export const PageHeader = ({
               <React.Fragment key={idx}>
                 {idx > 0 && <span className="text-[10px] text-slate-300">/</span>}
                 {crumb.path ? (
-                  <a href={crumb.path} className="hover:text-brand-orange transition-colors">
+                  <Link to={crumb.path} className="hover:text-brand-orange transition-colors">
                     {crumb.label}
-                  </a>
+                  </Link>
                 ) : (
                   <span className="text-slate-500 font-bold">{crumb.label}</span>
                 )}
