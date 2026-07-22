@@ -97,10 +97,19 @@ def check_integrity():
         db.close()
 
 
+def reset_notifications():
+    """Purge all notifications in batches and run verification."""
+    from scripts.reset_notifications import reset_notifications_db
+    deleted, remaining, validation = reset_notifications_db(batch_size=25)
+    print(f"[OK] Deleted {deleted} notifications. Remaining: {remaining}")
+    print(f"[OK] Validation passed: {validation['all_checks_passed']}")
+
+
 if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else "db-stats"
     commands = {
         "cleanup-notifications": cleanup_notifications,
+        "reset-notifications": reset_notifications,
         "db-stats": db_stats,
         "check-integrity": check_integrity,
     }
@@ -111,3 +120,4 @@ if __name__ == "__main__":
         print(f"Unknown command: {command}")
         print(f"Available: {', '.join(commands.keys())}")
         sys.exit(1)
+

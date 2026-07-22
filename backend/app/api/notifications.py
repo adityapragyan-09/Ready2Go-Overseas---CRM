@@ -5,7 +5,7 @@ Router: /api/v1/notifications
 Access Level: Authenticated Users (JWT required)
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
@@ -82,7 +82,50 @@ def list_notifications_route(
     )
 
 
-# ── PATCH /{id}/read ─────────────────────────
+# ── DELETE /batch & DELETE /all ──────────────
+
+@router.delete("/batch")
+def delete_notifications_batch_route(
+    batch_size: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete notifications in batches (25-50 items per batch).
+    Prevents large request timeouts on cloud deployments.
+    """
+    is_admin = current_user.role == "admin"
+    deleted, remaining = notification_service.delete_notifications_batch(
+        db, user_id=current_user.id, is_admin=is_admin, batch_size=batch_size
+    )
+    return success_response(
+        message=f"Deleted batch of {deleted} notification(s). {remaining} remaining.",
+        data={"deleted": deleted, "remaining": remaining},
+    )
+
+
+@router.delete("/all")
+def delete_all_notifications_route(
+    batch_size: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete all notifications visible to user, processed in batches internally."""
+    is_admin = current_user.role == "admin"
+    total_deleted = 0
+    while True:
+        deleted, remaining = notification_service.delete_notifications_batch(
+            db, user_id=current_user.id, is_admin=is_admin, batch_size=batch_size
+        )
+        total_deleted += deleted
+        if deleted == 0 or remaining == 0:
+            break
+
+    return success_response(
+        message=f"Deleted {total_deleted} notification(s).",
+        data={"deleted": total_deleted, "remaining": remaining},
+    )
+
 
 @router.patch("/{id}/read")
 def mark_read_route(

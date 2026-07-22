@@ -29,12 +29,21 @@ def upgrade() -> None:
     # Drop password_history table if it exists
     op.execute("DROP TABLE IF EXISTS password_history")
 
-    # Drop security columns from users table if they exist.
-    # Using raw SQL with IF EXISTS to handle the case where these columns
-    # were never added (the migration files that created them have since been
-    # deleted from the repository).
-    for col in ["must_change_password", "failed_login_attempts", "locked_until", "token_version", "last_password_change"]:
-        op.execute(f"ALTER TABLE users DROP COLUMN IF EXISTS {col}")
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == "sqlite"
+
+    if is_sqlite:
+        inspector = sa.inspect(bind)
+        cols = [c["name"] for c in inspector.get_columns("users")]
+        targets = ["must_change_password", "failed_login_attempts", "locked_until", "token_version", "last_password_change"]
+        to_drop = [t for t in targets if t in cols]
+        if to_drop:
+            with op.batch_alter_table("users") as batch_op:
+                for col in to_drop:
+                    batch_op.drop_column(col)
+    else:
+        for col in ["must_change_password", "failed_login_attempts", "locked_until", "token_version", "last_password_change"]:
+            op.execute(f"ALTER TABLE users DROP COLUMN IF EXISTS {col}")
 
 
 def downgrade() -> None:

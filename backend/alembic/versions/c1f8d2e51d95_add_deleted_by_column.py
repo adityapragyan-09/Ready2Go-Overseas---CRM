@@ -19,12 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ── deleted_by (FK to users.id) ──────────────
-    op.add_column('applicants', sa.Column('deleted_by', sa.Integer(), nullable=True))
-    op.create_foreign_key('fk_applicants_deleted_by', 'applicants', 'users', ['deleted_by'], ['id'])
-    op.create_index('ix_applicants_deleted_by', 'applicants', ['deleted_by'], unique=False)
+    with op.batch_alter_table('applicants') as batch_op:
+        batch_op.add_column(sa.Column('deleted_by', sa.Integer(), nullable=True))
+        batch_op.create_foreign_key('fk_applicants_deleted_by', 'users', ['deleted_by'], ['id'])
+        batch_op.create_index('ix_applicants_deleted_by', ['deleted_by'], unique=False)
 
 
 def downgrade() -> None:
-    op.drop_index('ix_applicants_deleted_by', table_name='applicants')
-    op.drop_constraint('fk_applicants_deleted_by', 'applicants', type_='foreignkey')
-    op.drop_column('applicants', 'deleted_by')
+    with op.batch_alter_table('applicants') as batch_op:
+        batch_op.drop_index('ix_applicants_deleted_by')
+        batch_op.drop_constraint('fk_applicants_deleted_by', type_='foreignkey')
+        batch_op.drop_column('deleted_by')
+

@@ -260,3 +260,126 @@ def delete_old_notifications(db: Session, days_limit: int = 30) -> int:
     except Exception:
         db.rollback()
         raise
+
+
+def delete_notifications_batch(
+    db: Session,
+    user_id: int | None = None,
+    is_admin: bool = True,
+    batch_size: int = 25,
+) -> tuple[int, int]:
+    """
+    Delete up to batch_size notifications visible to the given user/admin (or all if user_id is None).
+    Returns tuple of (deleted_count, remaining_count).
+    """
+    if user_id is not None:
+        if is_admin:
+            filter_cond = or_(
+                Notification.recipient_user_id == user_id,
+                Notification.recipient_user_id.is_(None),
+            )
+        else:
+            filter_cond = Notification.recipient_user_id == user_id
+        base_query = db.query(Notification).filter(filter_cond)
+    else:
+        base_query = db.query(Notification)
+
+    target_ids = [row[0] for row in base_query.with_entities(Notification.id).limit(batch_size).all()]
+
+    if not target_ids:
+        remaining = base_query.count()
+        return 0, remaining
+
+    deleted_count = (
+        db.query(Notification)
+        .filter(Notification.id.in_(target_ids))
+        .delete(synchronize_session=False)
+    )
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    remaining_count = base_query.count()
+    return deleted_count, remaining_count
+
+
+def purge_all_notifications_batched(
+    db: Session,
+    batch_size: int = 25,
+) -> tuple[int, int]:
+    """
+    Purge all notifications from the table in batches of `batch_size`.
+    Returns tuple of (total_deleted, remaining_count).
+    """
+    total_deleted = 0
+    while True:
+        deleted, remaining = delete_notifications_batch(
+            db, user_id=None, is_admin=True, batch_size=batch_size
+        )
+        total_deleted += deleted
+        if deleted == 0 or remaining == 0:
+            break
+    return total_deleted, remaining
+
+
+def verify_notification_cleanup(
+    db: Session,
+    user_id: int | None = None,
+    is_admin: bool = True,
+) -> dict:
+    """
+    Run comprehensive validation checks after notification cleanup:
+    1. Verify notifications table contains exactly 0 records.
+    2. Verify Inbox list query returns empty state (total_count == 0, items == []).
+    3. Verify unread notification count is 0.
+    4. Verify no orphaned notification references remain in database.
+    """
+    table_count = db.query(Notification).count()
+
+    if user_id:
+        total_inbox, items = get_latest_notifications(
+            db, user_id=user_id, is_admin=is_admin, page=1, page_size=20
+        )
+        unread = get_unread_count(db, user_id=user_id, is_admin=is_admin)
+    else:
+        total_inbox = table_count
+        items = []
+        unread = (
+            db.query(Notification)
+            .filter(Notification.is_read == False)
+            .count()
+        )
+
+    orphaned_recipients = (
+        db.query(Notification)
+        .outerjoin(User, Notification.recipient_user_id == User.id)
+        .filter(Notification.recipient_user_id.isnot(None), User.id.is_(None))
+        .count()
+    )
+    orphaned_creators = (
+        db.query(Notification)
+        .outerjoin(User, Notification.created_by == User.id)
+        .filter(Notification.created_by.isnot(None), User.id.is_(None))
+        .count()
+    )
+    orphaned_count = orphaned_recipients + orphaned_creators
+
+    all_passed = (
+        table_count == 0
+        and total_inbox == 0
+        and len(items) == 0
+        and unread == 0
+        and orphaned_count == 0
+    )
+
+    return {
+        "notifications_table_count": table_count,
+        "inbox_empty_state": total_inbox == 0 and len(items) == 0,
+        "unread_count": unread,
+        "orphaned_references_count": orphaned_count,
+        "all_checks_passed": all_passed,
+    }
+
