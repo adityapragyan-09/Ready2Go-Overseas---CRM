@@ -594,21 +594,23 @@ export const EmployeeManagement = () => {
     });
   };
 
-  const handlePasswordReset = async (emp) => {
-    // Note: window.prompt is used here intentionally for simplicity. In a production
-    // accessibility audit, replace with a modal dialog (aria-dialog) that includes an
-    // aria-labelledby pointing to the employee name and an accessible password input.
-    const password = window.prompt(`Enter new access password for "${emp.full_name}":`);
-    if (!password) return;
-    if (password.length < 6) {
+  const [passwordResetTarget, setPasswordResetTarget] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+
+  const handlePasswordReset = async () => {
+    const emp = passwordResetTarget;
+    if (!emp) return;
+    if (newPassword.length < 6) {
       toast.error('Password must be at least 6 characters long.');
       return;
     }
 
     try {
-      const res = await api.patch(`/employees/${emp.id}/reset-password`, { password });
+      const res = await api.patch(`/employees/${emp.id}/reset-password`, { password: newPassword });
       if (res.data && res.data.success) {
         toast.success(`Password reset successfully for "${emp.full_name}".`);
+        setPasswordResetTarget(null);
+        setNewPassword('');
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to reset password.');
@@ -973,6 +975,14 @@ export const EmployeeManagement = () => {
                               Edit
                             </button>
 
+                            {/* Reset Password */}
+                            <button
+                              onClick={() => setPasswordResetTarget(emp)}
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100 transition-all"
+                            >
+                              Password
+                            </button>
+
                             {/* Archive / Restore */}
                             {emp.is_active ? (
                               <button
@@ -1145,6 +1155,31 @@ export const EmployeeManagement = () => {
         onConfirm={handleConfirmAction}
         onCancel={() => setConfirmAction(null)}
       />
+
+      {/* Password Reset Dialog */}
+      <ConfirmationModal
+        visible={!!passwordResetTarget}
+        title="Reset Employee Password"
+        message={`Enter a new access password for "${passwordResetTarget?.full_name || 'Employee'}".`}
+        confirmText="Reset Password"
+        confirmVariant="primary"
+        loading={false}
+        onConfirm={handlePasswordReset}
+        onCancel={() => { setPasswordResetTarget(null); setNewPassword(''); }}
+      >
+        <div className="mt-3">
+          <label className="block text-xs font-bold text-slate-600 mb-1.5">New Password</label>
+          <input
+            type="text"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Minimum 6 characters"
+            minLength={6}
+            autoFocus
+            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold outline-none focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/10 transition-all placeholder-slate-400"
+          />
+        </div>
+      </ConfirmationModal>
     </div>
   );
 };
