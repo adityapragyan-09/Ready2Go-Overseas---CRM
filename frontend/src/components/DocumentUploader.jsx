@@ -3,23 +3,7 @@ import { UploadCloud, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import documentService from '../services/documentService';
 import { appConfig } from '../config/appConfig';
-
-const documentTypes = [
-  { value: 'passport', label: 'Passport' },
-  { value: 'national_id', label: 'National ID' },
-  { value: 'photograph', label: 'Photograph' },
-  { value: 'academic_certificate', label: 'Academic Certificate' },
-  { value: 'ielts', label: 'IELTS Report' },
-  { value: 'toefl', label: 'TOEFL Report' },
-  { value: 'offer_letter', label: 'Offer Letter' },
-  { value: 'bank_statement', label: 'Bank Statement' },
-  { value: 'financial_proof', label: 'Financial Proof' },
-  { value: 'visa_application', label: 'Visa Application Form' },
-  { value: 'insurance', label: 'Travel/Health Insurance' },
-  { value: 'employment_proof', label: 'Employment Proof' },
-  { value: 'travel_itinerary', label: 'Travel Itinerary' },
-  { value: 'other', label: 'Other Document' }
-];
+import DOCUMENT_TYPES from '../constants/documentTypes';
 
 export const DocumentUploader = ({ applicantId, onUploadSuccess }) => {
   const [dragActive, setDragActive] = useState(false);
@@ -124,7 +108,7 @@ export const DocumentUploader = ({ applicantId, onUploadSuccess }) => {
             disabled={isUploading}
             className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/5 outline-none transition-all duration-200"
           >
-            {documentTypes.map((type) => (
+            {DOCUMENT_TYPES.map((type) => (
               <option key={type.value} value={type.value}>
                 {type.label}
               </option>

@@ -1,25 +1,25 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import LoadingSpinner from './components/LoadingSpinner';
 import DashboardLayout from './layouts/DashboardLayout';
 import Login from './pages/Auth/Login';
-import EmployeeManagement from './pages/Employees/EmployeeManagement';
-import ApplicantsPage from './pages/Applicants/ApplicantsPage';
 
-import Dashboard from './pages/Dashboard/Dashboard';
-// Error Views
-import Forbidden from './pages/Errors/Forbidden';
-import NotFound from './pages/Errors/NotFound';
-import ServerError from './pages/Errors/ServerError';
-
-import { ActivityLogs } from './pages/ActivityLogs/ActivityLogs';
-import LeadInquiriesPage from './pages/LeadInquiries/LeadInquiriesPage';
-import { AssignmentRequestsPage } from './pages/AssignmentRequests/AssignmentRequestsPage';
-import { InboxPage } from './pages/Notifications/InboxPage';
+// Route-level code splitting — each page is a separate chunk
+const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
+const EmployeeManagement = lazy(() => import('./pages/Employees/EmployeeManagement'));
+const ApplicantsPage = lazy(() => import('./pages/Applicants/ApplicantsPage'));
+const LeadInquiriesPage = lazy(() => import('./pages/LeadInquiries/LeadInquiriesPage'));
+const ActivityLogs = lazy(() => import('./pages/ActivityLogs/ActivityLogs'));
+const AssignmentRequestsPage = lazy(() => import('./pages/AssignmentRequests/AssignmentRequestsPage'));
+const InboxPage = lazy(() => import('./pages/Notifications/InboxPage'));
+const Forbidden = lazy(() => import('./pages/Errors/Forbidden'));
+const NotFound = lazy(() => import('./pages/Errors/NotFound'));
+const ServerError = lazy(() => import('./pages/Errors/ServerError'));
 
 function App() {
   return (
@@ -27,14 +27,14 @@ function App() {
       <AuthProvider>
         <NotificationProvider>
         {/* Toast notifications rendering container */}
-        <Toaster 
+        <Toaster
           position="top-right"
           toastOptions={{
             duration: 4000,
             className: 'text-sm font-semibold text-slate-800 rounded-xl shadow-lg border border-slate-100 bg-white/95 backdrop-blur-md',
             success: {
               iconTheme: {
-                primary: '#f68b1e', // Orange icon theme matching success response alerts
+                primary: '#f68b1e',
                 secondary: '#fff',
               },
             },
@@ -42,6 +42,11 @@ function App() {
         />
 
         <ErrorBoundary>
+          <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+              <LoadingSpinner label="Loading Ready2Go CRM..." size="lg" />
+            </div>
+          }>
           <Routes>
             {/* Root Redirect */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -68,6 +73,7 @@ function App() {
             {/* Catch-all Routing */}
             <Route path="*" element={<Navigate to="/404" replace />} />
           </Routes>
+          </Suspense>
         </ErrorBoundary>
         </NotificationProvider>
       </AuthProvider>
