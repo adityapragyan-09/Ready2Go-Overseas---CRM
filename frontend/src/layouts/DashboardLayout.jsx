@@ -31,6 +31,7 @@ const DashboardLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [sidebarCounts, setSidebarCounts] = useState({});
   const dropdownRef = useRef(null);
 
   const handleLogout = async () => {
@@ -50,16 +51,24 @@ const DashboardLayout = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch unread inbox count with polling
+  // Fetch sidebar badges with polling
   useEffect(() => {
-    const fetchUnread = async () => {
+    const fetchCounts = async () => {
       try {
-        const res = await api.get('/notifications/unread-count');
-        if (res.data?.success) setUnreadCount(res.data.data.unread_count || 0);
+        const [notifRes, leadRes, pendingRes] = await Promise.all([
+          api.get('/notifications/unread-count'),
+          api.get('/applicants').catch(() => ({ data: { success: false } })),
+          api.get('/assignment-requests?status=PENDING').catch(() => ({ data: { success: false } })),
+        ]);
+        if (notifRes.data?.success) setUnreadCount(notifRes.data.data.unread_count || 0);
+        const counts = {};
+        if (leadRes.data?.success) counts.leads = leadRes.data.data.total || 0;
+        if (pendingRes.data?.success) counts.pendingRequests = pendingRes.data.data.total || 0;
+        setSidebarCounts(counts);
       } catch { /* silent */ }
     };
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -160,7 +169,15 @@ const DashboardLayout = () => {
                 `}
               >
                 <Icon size={18} className={active ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'} />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {(() => {
+                  const lbl = item.label;
+                  let b = null;
+                  if (lbl === 'Inbox' && unreadCount > 0) b = unreadCount;
+                  else if (lbl === 'Lead Inquiries' && sidebarCounts.leads > 0) b = sidebarCounts.leads;
+                  else if (lbl === 'Assignment Requests' && sidebarCounts.pendingRequests > 0) b = sidebarCounts.pendingRequests;
+                  return b !== null ? <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${active ? 'bg-white/20 text-white' : 'bg-brand-orange text-white'}`}>{b > 99 ? '99+' : b}</span> : null;
+                })()}
               </Link>
             );
           })}

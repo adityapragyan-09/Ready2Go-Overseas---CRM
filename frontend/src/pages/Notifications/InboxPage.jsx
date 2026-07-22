@@ -157,6 +157,21 @@ export const InboxPage = () => {
               {notifications.map(n => {
                 const IconMap = { applicant: UserPlus, assignment: UserPlus, employee: Shield, document: FileText, chat: MessageSquare, internal_chat: MessageCircle, authentication: Shield, progress: Clock };
                 const Icon = IconMap[n.module] || Inbox;
+                const CategoryBadge = ({ module }) => {
+                  const styles = {
+                    applicant: 'bg-blue-50 text-blue-600', lead: 'bg-blue-50 text-blue-600',
+                    assignment: 'bg-amber-50 text-amber-600', employee: 'bg-amber-50 text-amber-600',
+                    document: 'bg-purple-50 text-purple-600',
+                    chat: 'bg-emerald-50 text-emerald-600', internal_chat: 'bg-emerald-50 text-emerald-600',
+                    authentication: 'bg-slate-50 text-slate-600', system: 'bg-slate-50 text-slate-600',
+                    progress: 'bg-indigo-50 text-indigo-600',
+                  };
+                  const labels = { applicant: 'Lead', lead: 'Lead', assignment: 'Assignment', employee: 'Staff',
+                    document: 'Document', chat: 'Student Chat', internal_chat: 'Internal Chat',
+                    authentication: 'System', system: 'System', progress: 'Progress' };
+                  return <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${styles[module] || 'bg-slate-50 text-slate-500'}`}>{labels[module] || module}</span>;
+                };
+
                 return (
                   <div key={n.id}
                     className={`group flex items-start gap-4 p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-sm ${n.is_read ? 'bg-white border-slate-100' : 'bg-brand-blue/5 border-brand-blue/20'}`}
@@ -179,7 +194,10 @@ export const InboxPage = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <p className={`text-xs ${n.is_read ? 'font-semibold text-slate-700' : 'font-bold text-slate-800'}`}>{n.title}</p>
+                          <div className="flex items-center gap-2">
+                            <p className={`text-xs ${n.is_read ? 'font-semibold text-slate-700' : 'font-bold text-slate-800'}`}>{n.title}</p>
+                            <CategoryBadge module={n.module} />
+                          </div>
                           <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
                         </div>
                         {!n.is_read && <span className="w-2 h-2 rounded-full bg-brand-orange shrink-0 mt-1.5"></span>}

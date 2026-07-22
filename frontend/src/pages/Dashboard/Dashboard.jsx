@@ -52,6 +52,7 @@ export const Dashboard = () => {
   const [selectedDeleteDate, setSelectedDeleteDate] = useState('');
   const [myLeads, setMyLeads] = useState([]);
   const [myLeadsLoading, setMyLeadsLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadAdvisorApplicants = async (employeeId, name) => {
@@ -87,12 +88,14 @@ export const Dashboard = () => {
       setRecent(recentData);
 
       if (isAdmin) {
-        const [empData, sysData] = await Promise.all([
+        const [empData, sysData, notifCount] = await Promise.all([
           dashboardService.getEmployees(),
-          dashboardService.getSystem()
+          dashboardService.getSystem(),
+          api.get('/notifications/unread-count').catch(() => ({ data: { success: false } })),
         ]);
         setEmployees(empData);
         setSystem(sysData);
+        if (notifCount?.data?.success) setUnreadCount(notifCount.data.data.unread_count || 0);
       } else {
         // Counselors see their own employee item in workload
         const selfData = await dashboardService.getEmployees();
@@ -284,6 +287,36 @@ export const Dashboard = () => {
         </Card>
 
       </div>
+
+      {/* ── PRIORITY WORK QUEUE ── */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button onClick={() => navigate('/lead-inquiries')}
+            className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-brand-orange/40 transition-all text-left group">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unassigned Leads</p>
+            <p className="text-2xl font-extrabold text-slate-800 mt-1 group-hover:text-brand-orange transition-colors">{summary?.unassigned_leads || 0}</p>
+            <p className="text-[10px] text-slate-400 mt-1">Awaiting assignment</p>
+          </button>
+          <button onClick={() => navigate('/assignment-requests')}
+            className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-brand-orange/40 transition-all text-left group">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Approvals</p>
+            <p className="text-2xl font-extrabold text-slate-800 mt-1 group-hover:text-brand-orange transition-colors">{summary?.pending_assignments || 0}</p>
+            <p className="text-[10px] text-slate-400 mt-1">Assignment requests</p>
+          </button>
+          <button onClick={() => navigate('/inbox')}
+            className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-brand-orange/40 transition-all text-left group">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Unread Inbox</p>
+            <p className="text-2xl font-extrabold text-slate-800 mt-1 group-hover:text-brand-orange transition-colors">{unreadCount}</p>
+            <p className="text-[10px] text-slate-400 mt-1">Notifications</p>
+          </button>
+          <button onClick={() => navigate('/lead-inquiries')}
+            className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-brand-orange/40 transition-all text-left group">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">New Leads</p>
+            <p className="text-2xl font-extrabold text-slate-800 mt-1 group-hover:text-brand-orange transition-colors">{summary?.new_leads || 0}</p>
+            <p className="text-[10px] text-slate-400 mt-1">Today</p>
+          </button>
+        </div>
+      )}
 
       {/* Mini visa breakdown grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-white/40 border border-slate-100 p-4 rounded-3xl backdrop-blur-md">
