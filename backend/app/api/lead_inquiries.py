@@ -21,6 +21,9 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import LeadIdentity, get_current_user, resolve_lead_identity
 from app.core.enums import CallerType
 from app.db.session import get_db
+import logging
+
+logger = logging.getLogger(__name__)
 from app.models.user import User
 from app.schemas.lead_inquiry import (
     LeadInquiryAssign,

@@ -104,5 +104,3 @@ class ApplicantListResponse(BaseModel):
     total_pages: int
 
 
-# ── Backwards-compatible alias ───────────────────
-ApplicantOut = ApplicantResponse

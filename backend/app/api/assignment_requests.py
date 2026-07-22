@@ -180,8 +180,7 @@ def cancel_request_route(
 
 # ── POST /direct-assign — Admin direct assign ─
 
-# ── POST /direct-assign — Admin direct assign ─
-
+@router.post("/direct-assign")
 def direct_assign_route(
     body: dict,
     db: Session = Depends(get_db),

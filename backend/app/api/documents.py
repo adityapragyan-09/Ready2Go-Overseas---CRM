@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
 from app.db.session import get_db
+from app.models.applicant import Applicant
 from app.models.user import User
 from app.schemas.document import DocumentDownloadResponse, DocumentResponse, DocumentViewResponse
 from app.services.document_service import (
@@ -161,7 +162,6 @@ def download_all_documents_route(
     """
     Download all active documents for an applicant as a ZIP archive.
     """
-    from app.models.applicant import Applicant
     applicant = db.query(Applicant).filter(Applicant.id == applicant_id, Applicant.is_deleted == False).first()
     if not applicant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Applicant not found.")

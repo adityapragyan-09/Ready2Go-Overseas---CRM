@@ -41,5 +41,3 @@ class DocumentViewResponse(BaseModel):
     view_url: str
 
 
-# ── Backwards-compatible alias ───────────────────
-DocumentOut = DocumentResponse
