@@ -41,6 +41,7 @@ export const LeadInquiriesPage = () => {
   const [pendingRequests, setPendingRequests] = useState({});
   const [requestLoading, setRequestLoading] = useState({});
   const [requestModal, setRequestModal] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
 
   // Fetch employees for admin assignment dropdown
   const fetchEmployees = useCallback(async () => {
@@ -105,9 +106,11 @@ export const LeadInquiriesPage = () => {
     }
   };
 
-  const handleCancelRequest = async (requestId, leadId) => {
-    if (!window.confirm('Cancel this assignment request?')) return;
+  const handleCancelRequest = async () => {
+    if (!cancelTarget) return;
+    const { id: requestId, lead_id: leadId } = cancelTarget;
     setRequestLoading(prev => ({ ...prev, [leadId]: true }));
+    setCancelTarget(null);
     try {
       const res = await api.delete(`/assignment-requests/${requestId}`);
       if (res.data?.success) {
@@ -348,7 +351,7 @@ export const LeadInquiriesPage = () => {
                             <div className="flex items-center gap-1.5">
                               <span className="text-[10px] font-bold px-2 py-1 rounded bg-amber-50 text-amber-600">Pending Approval</span>
                               <button
-                                onClick={() => handleCancelRequest(pendingRequests[lead.id].id, lead.id)}
+                                onClick={() => setCancelTarget(pendingRequests[lead.id])}
                                 disabled={requestLoading[lead.id]}
                                 className="text-[9px] text-red-500 hover:text-red-700 font-bold transition-colors"
                               >
@@ -400,6 +403,18 @@ export const LeadInquiriesPage = () => {
         loading={requestModal && requestLoading[requestModal]}
         onConfirm={handleConfirmRequest}
         onCancel={() => setRequestModal(null)}
+      />
+
+      <ConfirmationModal
+        visible={!!cancelTarget}
+        title="Cancel Assignment Request"
+        message="Are you sure you want to cancel this assignment request?"
+        warning="This action cannot be undone."
+        confirmText="Yes, Cancel Request"
+        cancelText="No, Keep Request"
+        confirmVariant="danger"
+        onConfirm={handleCancelRequest}
+        onCancel={() => setCancelTarget(null)}
       />
     </div>
   );
