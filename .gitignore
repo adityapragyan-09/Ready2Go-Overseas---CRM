@@ -92,3 +92,6 @@ lerna-debug.log*
 # ── Build Output ──────────────────────────────
 frontend/dist/
 *.tsbuildinfo
+
+# ── Deployment Artifacts ─────────────────────
+ssl/
