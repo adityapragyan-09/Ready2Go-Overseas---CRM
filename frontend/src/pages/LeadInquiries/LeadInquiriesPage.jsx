@@ -5,6 +5,7 @@ import api from '../../config/api';
 import { useAuth } from '../../hooks/useAuth';
 import leadInquiryService from '../../services/leadInquiryService';
 import Card from '../../components/Card';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import PageHeader from '../../components/PageHeader';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import StatusBadge from '../../components/StatusBadge';
@@ -39,6 +40,7 @@ export const LeadInquiriesPage = () => {
   const [assignLoading, setAssignLoading] = useState({});
   const [pendingRequests, setPendingRequests] = useState({});
   const [requestLoading, setRequestLoading] = useState({});
+  const [requestModal, setRequestModal] = useState(null);
 
   // Fetch employees for admin assignment dropdown
   const fetchEmployees = useCallback(async () => {
@@ -81,13 +83,19 @@ export const LeadInquiriesPage = () => {
     }
   }, [isAdmin, fetchPendingRequests, page]);
 
-  const handleRequestAssignment = async (leadId) => {
-    if (!window.confirm('Request assignment of this lead to yourself? It requires admin approval.')) return;
+  const handleRequestAssignment = (leadId) => {
+    setRequestModal(leadId);
+  };
+
+  const handleConfirmRequest = async () => {
+    const leadId = requestModal;
+    if (!leadId) return;
     setRequestLoading(prev => ({ ...prev, [leadId]: true }));
     try {
       const res = await api.post('/assignment-requests', { lead_id: leadId });
       if (res.data?.success) {
         toast.success('Assignment request submitted for admin approval.');
+        setRequestModal(null);
         fetchPendingRequests();
       }
     } catch (err) {
@@ -380,6 +388,19 @@ export const LeadInquiriesPage = () => {
           </div>
         )}
       </Card>
+
+      <ConfirmationModal
+        visible={!!requestModal}
+        title="Request Assignment"
+        message="Are you sure you want to request ownership of this lead?"
+        warning="Your request will be sent to an administrator for approval. You will be notified once it is approved or rejected."
+        confirmText="Request Assignment"
+        cancelText="Cancel"
+        confirmVariant="primary"
+        loading={requestModal && requestLoading[requestModal]}
+        onConfirm={handleConfirmRequest}
+        onCancel={() => setRequestModal(null)}
+      />
     </div>
   );
 };
