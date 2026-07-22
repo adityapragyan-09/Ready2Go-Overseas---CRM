@@ -105,8 +105,8 @@ class LeadInquiryResponse(BaseModel):
 
 class LeadInquiryListResponse(BaseModel):
     """Paginated list of lead inquiries."""
+    items: list[LeadInquiryResponse]
     total: int
     page: int
     page_size: int
     total_pages: int
-    leads: list[LeadInquiryResponse]

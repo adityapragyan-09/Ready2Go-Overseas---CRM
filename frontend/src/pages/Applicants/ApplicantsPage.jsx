@@ -148,7 +148,7 @@ export const ApplicantsPage = () => {
         country: filters.country || undefined,
         assigned_to: filters.assignedEmployee || undefined
       });
-      setApplicants(data.applicants);
+      setApplicants(data.items || data.applicants || []);
       setTotal(data.total);
       setTotalPages(data.total_pages);
     } catch (err) {

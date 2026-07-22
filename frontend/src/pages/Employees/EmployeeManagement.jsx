@@ -556,7 +556,7 @@ export const EmployeeManagement = () => {
       });
       if (res.data && res.data.success) {
         setEmployees(res.data.data.items || []);
-        setTotalCount(res.data.data.total_count || 0);
+        setTotalCount(res.data.data.total || res.data.data.total_count || 0);
       }
     } catch (err) {
       toast.error('Failed to load staff directory.');

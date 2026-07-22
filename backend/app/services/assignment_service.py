@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.assignment_request import AssignmentRequest
 from app.models.lead_inquiry import LeadInquiry
@@ -58,8 +58,15 @@ def list_requests(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[int, list[AssignmentRequest]]:
-    """List assignment requests with filters and pagination."""
-    query = db.query(AssignmentRequest)
+    """List assignment requests with filters and pagination.
+
+    Uses joinedload to prevent N+1 queries when serializers access
+    employee and lead relationships.
+    """
+    query = db.query(AssignmentRequest).options(
+        joinedload(AssignmentRequest.employee),
+        joinedload(AssignmentRequest.lead),
+    )
     if status_filter:
         query = query.filter(AssignmentRequest.status == status_filter.upper())
     if employee_id:
@@ -72,7 +79,10 @@ def list_requests(
 
 def get_request(db: Session, request_id: int) -> AssignmentRequest:
     """Fetch a single assignment request."""
-    req = db.query(AssignmentRequest).filter(AssignmentRequest.id == request_id).first()
+    req = db.query(AssignmentRequest).options(
+        joinedload(AssignmentRequest.employee),
+        joinedload(AssignmentRequest.lead),
+    ).filter(AssignmentRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment request not found.")
     return req

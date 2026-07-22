@@ -212,11 +212,11 @@ def list_leads_route(
 
     leads_data = [_serialize_lead(lead) for lead in items]
     list_data = LeadInquiryListResponse(
+        items=leads_data,
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages,
-        leads=leads_data,
     ).model_dump()
 
     return success_response(

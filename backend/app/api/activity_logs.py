@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+import math
+
 from app.core.dependencies import require_admin
 from app.db.session import get_db
 from app.models.activity_log import ActivityLog
@@ -41,9 +43,10 @@ def get_activity_logs(
     return success_response(
         message="Activity logs retrieved successfully.",
         data={
-            "total_count": total,
+            "total": total,
             "page": page,
             "page_size": page_size,
+            "total_pages": max(1, math.ceil(total / page_size)),
             "items": items,
         },
     )

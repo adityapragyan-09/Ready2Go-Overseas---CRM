@@ -38,7 +38,8 @@ class NotificationCountResponse(BaseModel):
 
 class NotificationListResponse(BaseModel):
     """Paginated list response of notifications."""
-    total_count: int = Field(..., serialization_alias="total_count")
+    total: int = Field(..., serialization_alias="total")
     page: int
     page_size: int
+    total_pages: int
     items: list[NotificationOut]

@@ -5,6 +5,8 @@ Router: /api/v1/notifications
 Access Level: Authenticated Users (JWT required)
 """
 
+import math
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
@@ -70,10 +72,12 @@ def list_notifications_route(
     )
     
     serialized_items = [NotificationOut.model_validate(n).model_dump(by_alias=True) for n in items]
+    ps = page_size or 10
     data = NotificationListResponse(
-        total_count=total,
+        total=total,
         page=page,
-        page_size=page_size or 10,
+        page_size=ps,
+        total_pages=max(1, math.ceil(total / ps)),
         items=serialized_items,
     ).model_dump(by_alias=True)
 

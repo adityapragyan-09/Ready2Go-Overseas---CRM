@@ -46,7 +46,7 @@ export const InboxPage = () => {
       });
       if (res.data?.success) {
         setNotifications(res.data.data.items || []);
-        setTotalCount(res.data.data.total_count || 0);
+        setTotalCount(res.data.data.total || res.data.data.total_count || 0);
       }
     } catch {
       toast.error('Failed to load inbox.');

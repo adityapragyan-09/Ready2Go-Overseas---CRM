@@ -57,7 +57,7 @@ export const Dashboard = () => {
     try {
       const res = await api.get(`/applicants?assigned_to=${employeeId}&page_size=100`);
       if (res.data?.success) {
-        setAdvisorApplicants(res.data.data.applicants || []);
+        setAdvisorApplicants(res.data.data.items || res.data.data.applicants || []);
       } else {
         setAdvisorApplicants([]);
       }
@@ -111,7 +111,7 @@ export const Dashboard = () => {
     setMyLeadsLoading(true);
     try {
       const data = await leadInquiryService.getLeads({ assigned_to: user.id, page_size: 100 });
-      setMyLeads(data.leads || []);
+      setMyLeads(data.items || data.leads || []);
     } catch {
       // Silent fail
     } finally {

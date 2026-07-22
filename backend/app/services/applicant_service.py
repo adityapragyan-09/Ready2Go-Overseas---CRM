@@ -391,6 +391,7 @@ def list_applicants(
         "page": page,
         "page_size": page_size,
         "total_pages": total_pages,
+        "items": applicants,
     }
 
 

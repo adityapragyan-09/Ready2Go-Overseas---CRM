@@ -24,6 +24,7 @@ from app.schemas.employee import (
     EmployeeUpdate,
 )
 import logging
+import math
 from datetime import datetime, timezone
 
 from app.models.applicant import Applicant
@@ -133,10 +134,11 @@ def list_employees_route(
     
     serialized_items = [_safe_employee_out(u) for u in items]
     data = {
-        "total_count": total,
+        "total": total,
         "page": page,
         "page_size": page_size or 10,
         "items": serialized_items,
+        "total_pages": max(1, math.ceil(total / (page_size or 10))),
     }
 
     return success_response(

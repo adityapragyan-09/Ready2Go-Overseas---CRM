@@ -96,7 +96,7 @@ def list_applicants_route(
     )
 
     list_data = ApplicantListResponse(
-        applicants=[
+        items=[
             ApplicantResponse.model_validate(a) for a in result["applicants"]
         ],
         total=result["total"],

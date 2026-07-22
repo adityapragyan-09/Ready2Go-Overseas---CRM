@@ -5,6 +5,7 @@ Router: /api/v1/assignment-requests
 """
 
 import logging
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -83,6 +84,7 @@ def list_requests_route(
     total, items = service.list_requests(db, status_filter=status, employee_id=emp_id, page=page, page_size=page_size)
     return success_response(message="Requests retrieved.", data={
         "total": total, "page": page, "page_size": page_size,
+        "total_pages": max(1, math.ceil(total / page_size)),
         "items": [_serialize(r) for r in items],
     })
 

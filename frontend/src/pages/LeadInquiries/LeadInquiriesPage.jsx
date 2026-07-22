@@ -130,7 +130,7 @@ export const LeadInquiriesPage = () => {
         page,
         page_size: pageSize,
       });
-      setLeads(data.leads || []);
+      setLeads(data.items || data.leads || []);
       setTotal(data.total || 0);
       setTotalPages(data.total_pages || 1);
     } catch (err) {

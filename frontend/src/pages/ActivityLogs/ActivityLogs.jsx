@@ -31,7 +31,7 @@ export const ActivityLogs = () => {
       });
       if (res.data && res.data.success) {
         setLogs(res.data.data.items || []);
-        setTotalCount(res.data.data.total_count || 0);
+        setTotalCount(res.data.data.total || res.data.data.total_count || 0);
       }
     } catch (err) {
       toast.error('Failed to load system activity audit logs.');

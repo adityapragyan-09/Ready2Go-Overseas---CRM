@@ -97,7 +97,7 @@ class ApplicantResponse(BaseModel):
 
 class ApplicantListResponse(BaseModel):
     """Paginated list of applicants returned in API responses."""
-    applicants: list[ApplicantResponse]
+    items: list[ApplicantResponse]
     total: int
     page: int
     page_size: int

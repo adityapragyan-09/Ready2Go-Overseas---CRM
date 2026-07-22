@@ -9,7 +9,7 @@ import math
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.constants.lead_inquiry import NEW as STATUS_NEW
 from app.models.lead_inquiry import LeadInquiry
@@ -129,7 +129,11 @@ def get_leads(
     sort_by: str = "created_at",
     sort_order: str = "desc",
 ) -> tuple[int, list[LeadInquiry]]:
-    """Retrieve filtered, paginated, sorted list of leads."""
+    """Retrieve filtered, paginated, sorted list of leads.
+
+    Uses joinedload for assigned_employee to prevent N+1 when
+    the serializer accesses lead.assigned_employee.name.
+    """
     query = db.query(LeadInquiry)
 
     if search:
@@ -154,7 +158,9 @@ def get_leads(
 
     total = query.count()
 
-    # Sorting
+    # Apply eager loading and ordering
+    query = query.options(joinedload(LeadInquiry.assigned_employee))
+
     sort_column = getattr(LeadInquiry, sort_by, LeadInquiry.created_at)
     order_fn = sort_column.desc if sort_order == "desc" else sort_column.asc
     query = query.order_by(order_fn())
