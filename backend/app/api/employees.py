@@ -5,6 +5,9 @@ Router: /api/v1/employees
 Access Level:
     - Profile me: Authenticated Users (JWT required)
     - All other endpoints: Administrators only (require_admin dependency)
+
+Archive replaces hard delete. Documents, messages, and notifications
+never prevent archiving — only assigned applicants matter.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,7 +17,7 @@ from app.core.dependencies import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.employee import (
-    ArchiveRequest,
+    EmployeeArchiveRequest,
     EmployeeCreate,
     EmployeeListResponse,
     EmployeeOut,
@@ -25,9 +28,7 @@ from app.schemas.employee import (
 )
 import logging
 import math
-from datetime import datetime, timezone
 
-from app.models.applicant import Applicant
 from app.services import employee_service
 from app.services.auth_service import reset_employee_password
 from app.utils.response import error_response, success_response
@@ -41,7 +42,6 @@ def _safe_employee_out(user) -> dict:
         return EmployeeOut.model_validate(user).model_dump(by_alias=True)
     except Exception as e:
         logger.warning("Employee serialization failed for user %s: %s", user.id, e)
-        # Fallback: serialize without triggering deferred loads
         data = {
             "id": user.id,
             "employee_code": getattr(user, "employee_code", None),
@@ -74,10 +74,7 @@ router = APIRouter()
 def get_own_profile(
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Retrieve own profile information.
-    Accessible to all authenticated employees and admins.
-    """
+    """Retrieve own profile information."""
     data = _safe_employee_out(current_user)
     return success_response(
         message="Profile retrieved successfully.",
@@ -93,10 +90,7 @@ def update_own_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Update own profile fields (Phone, Photo, Designation, Department).
-    Accessible to all authenticated employees and admins.
-    """
+    """Update own profile fields (Phone, Photo, Designation, Department)."""
     updated_user = employee_service.update_own_profile(db, current_user.id, body)
     data = _safe_employee_out(updated_user)
     return success_response(
@@ -113,14 +107,16 @@ def list_employees_route(
     role: str | None = Query(default=None),
     department: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
+    include_archived: bool = Query(default=False, description="Include archived employees in results"),
     page: int = Query(default=1, ge=1),
     page_size: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
     """
-    List all employees with search query, filters, and paginated defaults.
-    Access restricted to administrators.
+    List all employees with search, filters, and pagination.
+    By default excludes archived employees unless include_archived=true
+    or is_active filter is explicitly provided.
     """
     total, items = employee_service.list_employees(
         db,
@@ -128,10 +124,11 @@ def list_employees_route(
         role=role,
         department=department,
         is_active=is_active,
+        include_archived=include_archived,
         page=page,
         page_size=page_size,
     )
-    
+
     serialized_items = [_safe_employee_out(u) for u in items]
     data = {
         "total": total,
@@ -155,10 +152,7 @@ def create_employee_route(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """
-    Register a new system user and auto-generate an employee code.
-    Access restricted to administrators.
-    """
+    """Register a new system user and auto-generate an employee code."""
     new_emp = employee_service.create_employee(db, body, created_by=admin.id)
     data = _safe_employee_out(new_emp)
     return success_response(
@@ -175,10 +169,7 @@ def get_employee_route(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """
-    Retrieve single employee detail by ID.
-    Access restricted to administrators.
-    """
+    """Retrieve single employee detail by ID."""
     emp = employee_service.get_employee_by_id(db, id)
     data = _safe_employee_out(emp)
     return success_response(
@@ -196,10 +187,7 @@ def update_employee_route(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """
-    Update employee record properties.
-    Access restricted to administrators.
-    """
+    """Update employee record properties."""
     updated_emp = employee_service.update_employee(db, id, body)
     data = _safe_employee_out(updated_emp)
     return success_response(
@@ -217,10 +205,7 @@ def update_employee_status_route(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """
-    Toggle employee status (active/inactive). Self-deactivation is prohibited.
-    Access restricted to administrators.
-    """
+    """Toggle employee status (active/inactive). Self-deactivation prohibited."""
     updated_emp = employee_service.update_employee_status(db, id, is_active=body.is_active, action_by=admin.id)
     data = _safe_employee_out(updated_emp)
     return success_response(
@@ -238,10 +223,7 @@ def reset_employee_password_route(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """
-    Reset employee account password.
-    Access restricted to administrators.
-    """
+    """Reset employee account password."""
     updated_emp = reset_employee_password(db, employee_id=id, new_password=body.password)
     data = _safe_employee_out(updated_emp)
     return success_response(
@@ -255,48 +237,43 @@ def reset_employee_password_route(
 @router.patch("/{id}/archive")
 def archive_employee_route(
     id: int,
-    body: ArchiveRequest,
+    body: EmployeeArchiveRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
     """
-    Archive an employee with reason and optional leave dates.
-    Archived employees cannot login or be assigned.
+    Archive an employee with reason, optional leave dates, and optional
+    applicant reassignment.
+
+    Documents, messages, and notifications NEVER prevent archiving.
+    Only assigned applicants matter — and they must be reassigned before
+    archiving if they exist.
+
+    Query parameters for reassignment:
+      reassignment_mode = "auto"   — evenly distribute among active employees
+      reassignment_mode = "manual" — assign all to target_employee_id
+
+    If the employee has assigned applicants, one of the above modes is required.
+    If they have no applicants, the employee is archived immediately.
     """
-    from datetime import datetime
-    user = db.query(User).filter(User.id == id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
-    if user.id == admin.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot archive your own account.")
+    result = employee_service.archive_employee(
+        db,
+        employee_id=id,
+        admin_id=admin.id,
+        reason=body.reason,
+        leave_start=body.leave_start,
+        leave_end=body.leave_end,
+        reassignment_mode=body.reassignment_mode,
+        target_employee_id=body.target_employee_id,
+    )
 
-    user.is_active = False
-    user.archived_at = datetime.now(timezone.utc)
-    user.archived_reason = body.reason
+    data = _safe_employee_out(result["employee"])
+    data["archive_result"] = result["archive_result"]
 
-    if body.leave_start:
-        try:
-            user.leave_start = datetime.strptime(body.leave_start, "%Y-%m-%d")
-        except ValueError:
-            pass
-    if body.leave_end:
-        try:
-            user.leave_end = datetime.strptime(body.leave_end, "%Y-%m-%d")
-        except ValueError:
-            pass
-
-    try:
-        db.commit()
-        db.refresh(user)
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to archive employee.")
-
-    logger.info("Employee '%s' (ID %d) archived. Reason: %s. Leave: %s - %s",
-                user.name, id, body.reason, body.leave_start or 'N/A', body.leave_end or 'N/A')
-
-    data = _safe_employee_out(user)
-    return success_response(message="Employee archived successfully.", data=data)
+    return success_response(
+        message=f"Employee '{result['employee'].name}' archived successfully.",
+        data=data,
+    )
 
 
 # ── PATCH /{id}/unarchive ────────────────────────
@@ -309,7 +286,6 @@ def unarchive_employee_route(
 ):
     """
     Unarchive an employee and restore active status.
-    Access restricted to administrators.
     """
     user = db.query(User).filter(User.id == id).first()
     if not user:
@@ -326,136 +302,3 @@ def unarchive_employee_route(
 
     data = _safe_employee_out(user)
     return success_response(message="Employee unarchived and reactivated successfully.", data=data)
-
-
-# ── DELETE /{id} ────────────────────────────────
-
-@router.delete("/{id}")
-def delete_employee_route(
-    id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """
-    Permanently delete an employee.
-    Only allowed if the employee has no assigned applicants.
-    Access restricted to administrators.
-    """
-    user = db.query(User).filter(User.id == id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
-    if user.id == admin.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account.")
-
-    name = user.name
-
-    # Check all RESTRICT foreign keys before attempting deletion
-    from app.models.document import Document
-    from app.models.message import Message
-    from app.models.progress import ProgressHistory
-
-    blockers = []
-
-    # applicant.created_by (RESTRICT)
-    created_apps = db.query(Applicant.id).filter(Applicant.created_by == id).count()
-    if created_apps > 0:
-        blockers.append(f"applicants (created_by): {created_apps} records")
-
-    # document.uploaded_by (RESTRICT)
-    uploaded_docs = db.query(Document.id).filter(Document.uploaded_by == id).count()
-    if uploaded_docs > 0:
-        blockers.append(f"documents (uploaded_by): {uploaded_docs} records")
-
-    # message.sender_id (RESTRICT)
-    sent_msgs = db.query(Message.id).filter(Message.sender_id == id).count()
-    if sent_msgs > 0:
-        blockers.append(f"messages (sender_id): {sent_msgs} records")
-
-    # progress.updated_by (RESTRICT)
-    progress_updates = db.query(ProgressHistory.id).filter(ProgressHistory.updated_by == id).count()
-    if progress_updates > 0:
-        blockers.append(f"progress_history (updated_by): {progress_updates} records")
-
-    # Also check assigned_to (should be SET NULL, but check anyway)
-    assigned_count = db.query(Applicant).filter(Applicant.assigned_to == id, Applicant.is_deleted == False).count()
-    if assigned_count > 0:
-        blockers.append(f"applicants (assigned_to): {assigned_count} active applicants")
-
-    # Check activity_logs and notifications (SET NULL/CASCADE — informational)
-    from app.models.activity_log import ActivityLog
-    from app.models.notification import Notification
-    log_count = db.query(ActivityLog.id).filter(ActivityLog.user_id == id).count()
-    notif_created = db.query(Notification.id).filter(Notification.created_by == id).count()
-    notif_received = db.query(Notification.id).filter(Notification.recipient_user_id == id).count()
-
-    if blockers:
-        detail = (
-            "Employee cannot be deleted. The following references exist:\n"
-            + "\n".join(f"  - {b}" for b in blockers)
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=detail,
-        )
-
-    try:
-        db.delete(user)
-        db.commit()
-        logger.info("Employee '%s' (ID %d) deleted. Referenced rows affected: activity_logs=%d notifications_created=%d notifications_received=%d",
-                     name, id, log_count, notif_created, notif_received)
-    except Exception as exc:
-        db.rollback()
-        # Capture the exact database error for debugging
-        logger.error("DELETE employee %d failed: %s", id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Employee cannot be deleted due to a database constraint: {exc}",
-        )
-
-    return success_response(message=f"Employee '{name}' deleted permanently.")
-
-
-# ── POST /{id}/transfer-applicants ──────────────
-
-@router.post("/{id}/transfer-applicants")
-def transfer_applicants_route(
-    id: int,
-    body: dict,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """
-    Transfer all applicants from one employee to another.
-    Access restricted to administrators.
-    """
-    from pydantic import BaseModel
-
-    class TransferSchema(BaseModel):
-        target_employee_id: int
-
-    transfer = TransferSchema(**body)
-
-    source_user = db.query(User).filter(User.id == id).first()
-    if not source_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source employee not found.")
-
-    target_user = db.query(User).filter(User.id == transfer.target_employee_id).first()
-    if not target_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target employee not found.")
-
-    applicants = db.query(Applicant).filter(Applicant.assigned_to == id, Applicant.is_deleted == False).all()
-    count = len(applicants)
-
-    for app in applicants:
-        app.assigned_to = transfer.target_employee_id
-
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to transfer applicants.")
-
-    return success_response(
-        message=f"Successfully transferred {count} applicant(s) to '{target_user.name}'.",
-        data={"transferred_count": count, "target_employee": target_user.name},
-    )

@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 import {
   Plus, Search, UserCheck, UserX, ShieldAlert, X,
   Briefcase, Mail, Phone, Clock, CheckCircle2, Copy,
-  Eye, Lock
+  Eye, Lock, AlertTriangle, Users, RefreshCw,
+  ChevronRight, Calendar
 } from 'lucide-react';
 
 import api from '../../config/api';
@@ -17,19 +18,39 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import EmptyState from '../../components/EmptyState';
 
+// ── Constants ──────────────────────────────────
+const LEAVE_REASONS = ['Annual Leave', 'Sick Leave', 'Personal Leave'];
+const ARCHIVE_REASONS = [
+  'Annual Leave',
+  'Sick Leave',
+  'Personal Leave',
+  'Resigned',
+  'Terminated',
+  'Inactive',
+];
+
 // ── 1. Status Badge Component ────────────────────
-export const EmployeeStatusBadge = ({ isActive }) => {
+export const EmployeeStatusBadge = ({ isActive, archivedAt }) => {
+  if (archivedAt) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-slate-100 text-slate-500 border-slate-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+        Archived
+      </span>
+    );
+  }
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-      isActive 
-        ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
-        : 'bg-slate-50 text-slate-400 border-slate-200'
+      isActive
+        ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+        : 'bg-amber-50 text-amber-600 border-amber-200'
     }`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
       {isActive ? 'Active' : 'Inactive'}
     </span>
   );
 };
+
 
 // ── 2. Filters Toolbar Component ─────────────────
 const EmployeeFilters = ({
@@ -42,7 +63,6 @@ const EmployeeFilters = ({
   return (
     <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-3">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs font-semibold">
-        {/* Search */}
         <div className="relative">
           <Search size={14} className="absolute inset-y-0 my-auto left-3 text-slate-400" />
           <input
@@ -54,7 +74,6 @@ const EmployeeFilters = ({
           />
         </div>
 
-        {/* Role */}
         <select
           value={role}
           onChange={(e) => setRole(e.target.value)}
@@ -65,7 +84,6 @@ const EmployeeFilters = ({
           <option value="employee">Counselor</option>
         </select>
 
-        {/* Department */}
         <input
           type="text"
           value={dept}
@@ -74,7 +92,6 @@ const EmployeeFilters = ({
           className="px-3 py-2.5 border border-slate-200 bg-white rounded-xl text-slate-600 outline-none focus:border-brand-orange"
         />
 
-        {/* Status */}
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -83,6 +100,7 @@ const EmployeeFilters = ({
           <option value="">All Statuses</option>
           <option value="active">Active Only</option>
           <option value="inactive">Inactive Only</option>
+          <option value="archived">Archived</option>
         </select>
       </div>
 
@@ -113,8 +131,8 @@ const EmployeeAssignmentPanel = ({ employeeId }) => {
         if (res.data && res.data.success) {
           setApplicants(res.data.data.items || []);
         }
-      } catch (err) {
-        // Silent fail - assignments panel is secondary content
+      } catch {
+        // Silent
       } finally {
         setLoading(false);
       }
@@ -138,7 +156,7 @@ const EmployeeAssignmentPanel = ({ employeeId }) => {
       ) : (
         <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
           {applicants.map((app) => (
-            <div 
+            <div
               key={app.id}
               onClick={() => navigate('/applicants')}
               className="p-3 bg-white border border-slate-100 hover:border-brand-orange/40 rounded-xl flex items-center justify-between text-xs font-semibold cursor-pointer transition-all shadow-sm group"
@@ -173,7 +191,7 @@ const EmployeeDetailsDrawer = ({ employee, onClose }) => {
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
       <div onClick={onClose} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-      
+
       <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between p-6 animate-slide-left z-10 border-l border-slate-100 text-left">
         <div className="space-y-6 flex-1 overflow-y-auto pr-1">
           <div className="flex justify-between items-start border-b border-slate-100 pb-4">
@@ -186,7 +204,6 @@ const EmployeeDetailsDrawer = ({ employee, onClose }) => {
             </button>
           </div>
 
-          {/* Core Profile Card */}
           <div className="flex gap-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
             <div className="w-14 h-14 rounded-full border border-slate-200 flex items-center justify-center bg-white text-brand-orange text-lg font-black shrink-0">
               {employee.profile_photo ? (
@@ -204,7 +221,6 @@ const EmployeeDetailsDrawer = ({ employee, onClose }) => {
             </div>
           </div>
 
-          {/* Details Metadata List */}
           <div className="space-y-3.5 border-b border-slate-100 pb-5 text-xs font-semibold text-slate-500">
             <div className="flex justify-between">
               <span className="flex items-center gap-1.5"><Mail size={13} /> Email</span>
@@ -226,9 +242,20 @@ const EmployeeDetailsDrawer = ({ employee, onClose }) => {
               <span className="flex items-center gap-1.5"><Clock size={13} /> Last Logout</span>
               <span className="text-slate-700">{formattedDate(employee.last_logout)}</span>
             </div>
+            {employee.archived_at && (
+              <div className="flex justify-between text-amber-600">
+                <span className="flex items-center gap-1.5"><Calendar size={13} /> Archived</span>
+                <span>{formattedDate(employee.archived_at)}</span>
+              </div>
+            )}
+            {employee.archived_reason && (
+              <div className="flex justify-between text-amber-600">
+                <span className="flex items-center gap-1.5"><AlertTriangle size={13} /> Reason</span>
+                <span>{employee.archived_reason}</span>
+              </div>
+            )}
           </div>
 
-          {/* Assignment panel */}
           <div>
             <h4 className="text-xs font-black text-slate-800 mb-3.5 uppercase tracking-wider">Assigned Applicants Queue</h4>
             <EmployeeAssignmentPanel employeeId={employee.id} />
@@ -243,7 +270,282 @@ const EmployeeDetailsDrawer = ({ employee, onClose }) => {
   );
 };
 
-// ── 5. Employee Form Component (Full-Page) ──────────────────
+// ── 5. Archive Modal Component ──────────────────
+const ArchiveEmployeeModal = ({ employee, onClose, onConfirm, employees, loading }) => {
+  const [reason, setReason] = useState('Annual Leave');
+  const [leaveStart, setLeaveStart] = useState('');
+  const [leaveEnd, setLeaveEnd] = useState('');
+  const [reassignMode, setReassignMode] = useState(null); // 'auto' | 'manual' | null
+  const [targetEmployeeId, setTargetEmployeeId] = useState('');
+  const [applicantCount, setApplicantCount] = useState(0);
+  const [checking, setChecking] = useState(true);
+
+  const isLeaveReason = LEAVE_REASONS.includes(reason);
+  const showDates = isLeaveReason;
+  const hasApplicants = applicantCount > 0;
+
+  // Fetch applicant count on mount
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        setChecking(true);
+        const res = await api.get(`/applicants?assigned_to=${employee.id}&page_size=1`);
+        setApplicantCount(res.data?.data?.total || 0);
+      } catch {
+        setApplicantCount(0);
+      } finally {
+        setChecking(false);
+      }
+    };
+    fetchCount();
+  }, [employee.id]);
+
+  const activeEmployees = (employees || []).filter(
+    e => e.id !== employee.id && e.is_active && !e.archived_at
+  );
+
+  const handleConfirm = () => {
+    if (hasApplicants && !reassignMode) {
+      toast.error('Please select a reassignment option for the assigned applicants.');
+      return;
+    }
+    if (reassignMode === 'manual' && !targetEmployeeId) {
+      toast.error('Please select a target employee for manual reassignment.');
+      return;
+    }
+    if (showDates && leaveStart && leaveEnd && new Date(leaveEnd) < new Date(leaveStart)) {
+      toast.error('Leave end date must be after the start date.');
+      return;
+    }
+
+    onConfirm({
+      reason,
+      leave_start: showDates ? leaveStart || null : null,
+      leave_end: showDates ? leaveEnd || null : null,
+      reassignment_mode: hasApplicants ? reassignMode : null,
+      target_employee_id: reassignMode === 'manual' ? Number(targetEmployeeId) : null,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div onClick={onClose} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 text-left z-10 animate-scale-up overflow-hidden">
+        {/* Header */}
+        <div className="p-6 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-full bg-amber-50 text-amber-500">
+              <UserX size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-800 font-display">Archive Employee</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{employee.full_name} &bull; {employee.employee_code || 'EMP-XXXXXX'}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+          {checking ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-6 h-6 border-2 border-brand-orange border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : (
+            <>
+              {/* Applicant Alert */}
+              {hasApplicants && (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+                  <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">
+                      This employee is currently assigned to <span className="text-amber-600">{applicantCount}</span> Applicant{applicantCount !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      Before archiving, these applicants must be reassigned to another advisor.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!hasApplicants && (
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-3">
+                  <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-emerald-800">No assigned applicants</p>
+                    <p className="text-xs text-emerald-700 mt-1">
+                      This employee has no active applicants. They will be archived immediately.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Reason */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Reason for Archive</label>
+                <select
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-brand-orange bg-white"
+                >
+                  {ARCHIVE_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Conditional Leave Dates */}
+              {showDates && (
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 space-y-3">
+                  <p className="text-xs font-bold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar size={14} /> Leave Period
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={leaveStart}
+                        onChange={(e) => setLeaveStart(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-orange bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={leaveEnd}
+                        onChange={(e) => setLeaveEnd(e.target.value)}
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-orange bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Reassignment Options (only if has applicants) */}
+              {hasApplicants && (
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    Reassign Applicants
+                  </p>
+
+                  {/* Auto-distribute */}
+                  <label
+                    className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      reassignMode === 'auto'
+                        ? 'border-brand-orange bg-brand-orange/[0.03]'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="reassign"
+                      checked={reassignMode === 'auto'}
+                      onChange={() => setReassignMode('auto')}
+                      className="mt-0.5 accent-brand-orange"
+                    />
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Automatically distribute evenly</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Applicants will be distributed among active advisors based on current workload.
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-[10px] text-slate-400">
+                        <RefreshCw size={12} />
+                        <span>Even workload distribution</span>
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Manual assignment */}
+                  <label
+                    className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      reassignMode === 'manual'
+                        ? 'border-brand-orange bg-brand-orange/[0.03]'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="reassign"
+                      checked={reassignMode === 'manual'}
+                      onChange={() => setReassignMode('manual')}
+                      className="mt-0.5 accent-brand-orange"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-slate-800">Assign all applicants to</p>
+                      {reassignMode === 'manual' && (
+                        <div className="mt-2">
+                          <select
+                            value={targetEmployeeId}
+                            onChange={(e) => setTargetEmployeeId(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-orange bg-white"
+                          >
+                            <option value="">Select employee...</option>
+                            {activeEmployees
+                              .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
+                              .map((e) => (
+                                <option key={e.id} value={e.id}>{e.full_name}</option>
+                              ))
+                            }
+                          </select>
+                        </div>
+                      )}
+                      {reassignMode !== 'manual' && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Select a specific advisor to receive all applicants.
+                        </p>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* Summary */}
+                  {reassignMode && (
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                      <span className="font-bold text-slate-800">{applicantCount}</span> Applicant{applicantCount !== 1 ? 's' : ''} will be{' '}
+                      {reassignMode === 'auto' ? (
+                        <span className="text-brand-orange font-bold">automatically distributed</span>
+                      ) : (
+                        <span>assigned to <span className="text-brand-orange font-bold">
+                          {activeEmployees.find(e => e.id === Number(targetEmployeeId))?.full_name || 'selected advisor'}
+                        </span></span>
+                      )}
+                      , then the employee will be archived.
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 pt-4 border-t border-slate-100 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={loading || checking || (hasApplicants && !reassignMode) || (reassignMode === 'manual' && !targetEmployeeId)}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-all disabled:opacity-50 inline-flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Processing...</>
+            ) : (
+              <><UserX size={14} /> {hasApplicants ? 'Reassign & Archive' : 'Archive Employee'}</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── 6. Employee Form Component ──────────────────
 const EmployeeForm = ({ employee, isSubmitting, onSubmit, onCancel }) => {
   const [name, setName] = useState(employee?.full_name || '');
   const [email, setEmail] = useState(employee?.email || '');
@@ -273,101 +575,47 @@ const EmployeeForm = ({ employee, isSubmitting, onSubmit, onCancel }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Two-column grid for fields */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <Input
-          label="Full Name"
-          placeholder="Rahul Sharma"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-
-        <Input
-          label="Email Address"
-          type="email"
-          placeholder="counselor@ready2gooverseas.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          disabled={!!employee}
-        />
-
-        <Input
-          label="Phone Number"
-          placeholder="+91 98765 43210"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
+        <Input label="Full Name" placeholder="Rahul Sharma" value={name} onChange={(e) => setName(e.target.value)} required />
+        <Input label="Email Address" type="email" placeholder="counselor@ready2gooverseas.com" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={!!employee} />
+        <Input label="Phone Number" placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} />
 
         {!employee && (
           <div className="relative">
-            <Input
-              label="Access Password"
-              placeholder="Minimum 6 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <button
-              type="button"
-              onClick={generateAutoPassword}
-              className="absolute right-3 top-[37px] px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors"
-            >
+            <Input label="Access Password" placeholder="Minimum 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <button type="button" onClick={generateAutoPassword}
+              className="absolute right-3 top-[37px] px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-100 transition-colors">
               Auto
             </button>
           </div>
         )}
 
-        <Input
-          label="Designation"
-          placeholder="e.g. Senior Counselor"
-          value={designation}
-          onChange={(e) => setDesignation(e.target.value)}
-        />
-
-        <Input
-          label="Department"
-          placeholder="e.g. Australia Admissions"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-        />
+        <Input label="Designation" placeholder="e.g. Senior Counselor" value={designation} onChange={(e) => setDesignation(e.target.value)} />
+        <Input label="Department" placeholder="e.g. Australia Admissions" value={department} onChange={(e) => setDepartment(e.target.value)} />
       </div>
 
-      {/* Role Privilege Selection */}
       <div className="flex flex-col gap-2">
-        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          Role Privilege
-        </label>
+        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Role Privilege</label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button
-            type="button"
-            onClick={() => setRole('employee')}
-            className={`px-4 py-3.5 rounded-xl border text-xs font-bold text-center transition-all duration-200
-              ${role === 'employee'
-                ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-sm shadow-brand-orange/10'
+          <button type="button" onClick={() => setRole('employee')}
+            className={`px-4 py-3.5 rounded-xl border text-xs font-bold text-center transition-all duration-200 ${
+              role === 'employee'
+                ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-sm'
                 : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-              }
-            `}
-          >
+            }`}>
             Counselor (Staff)
           </button>
-          <button
-            type="button"
-            onClick={() => setRole('admin')}
-            className={`px-4 py-3.5 rounded-xl border text-xs font-bold text-center transition-all duration-200
-              ${role === 'admin'
-                ? 'border-rose-500 bg-rose-50 text-rose-600 shadow-sm shadow-rose-500/10'
+          <button type="button" onClick={() => setRole('admin')}
+            className={`px-4 py-3.5 rounded-xl border text-xs font-bold text-center transition-all duration-200 ${
+              role === 'admin'
+                ? 'border-rose-500 bg-rose-50 text-rose-600 shadow-sm'
                 : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-              }
-            `}
-          >
+            }`}>
             Administrator
           </button>
         </div>
       </div>
 
-      {/* Form Action Buttons */}
       <div className="flex gap-3 pt-4 border-t border-slate-100">
         <Button onClick={onCancel} variant="outline" className="w-1/3" disabled={isSubmitting} type="button">Cancel</Button>
         <Button type="submit" variant="secondary" className="w-2/3" isLoading={isSubmitting}>
@@ -378,7 +626,7 @@ const EmployeeForm = ({ employee, isSubmitting, onSubmit, onCancel }) => {
   );
 };
 
-// ── 6. Employee Profile Component (Self-Edit) ──────
+// ── 7. Employee Profile Component ────────────────
 const EmployeeProfile = ({ currentUser }) => {
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [photo, setPhoto] = useState(currentUser?.profile_photo || '');
@@ -390,16 +638,11 @@ const EmployeeProfile = ({ currentUser }) => {
     e.preventDefault();
     try {
       setIsSubmitting(true);
-      const res = await api.put('/employees/profile/me', {
-        phone,
-        profile_photo: photo,
-        designation,
-        department
-      });
+      const res = await api.put('/employees/profile/me', { phone, profile_photo: photo, designation, department });
       if (res.data && res.data.success) {
         toast.success('Your profile has been updated successfully!');
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to update profile.');
     } finally {
       setIsSubmitting(false);
@@ -412,78 +655,42 @@ const EmployeeProfile = ({ currentUser }) => {
     <Card className="max-w-xl text-left border border-slate-100">
       <div className="flex gap-4 items-center border-b border-slate-100 pb-5 mb-5">
         <div className="w-16 h-16 rounded-full border flex items-center justify-center text-xl font-bold bg-slate-50 text-brand-orange">
-          {photo ? <img src={photo} alt="" className="w-full h-full object-cover rounded-full" /> : (currentUser?.name || currentUser?.full_name || 'US').substring(0, 2).toUpperCase()}
+          {photo ? <img src={photo} alt="" className="w-full h-full object-cover rounded-full" />
+            : (currentUser?.name || 'US').substring(0, 2).toUpperCase()}
         </div>
         <div>
-          <h3 className="text-sm font-black text-slate-800">{currentUser?.name || currentUser?.full_name || 'User'}</h3>
+          <h3 className="text-sm font-black text-slate-800">{currentUser?.name || 'User'}</h3>
           <p className="text-xs text-slate-400 font-semibold">{currentUser?.email} &bull; <span className="uppercase text-brand-orange font-bold">{currentUser?.role}</span></p>
         </div>
       </div>
 
       <form onSubmit={handleSaveProfile} className="space-y-4">
-        <Input
-          label="Phone Number"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="+91 98765 43210"
-        />
-
-        <Input
-          label="Profile Photo URL"
-          value={photo}
-          onChange={(e) => setPhoto(e.target.value)}
-          placeholder="https://..."
-        />
-
-        <Input
-          label="Designation"
-          value={designation}
-          onChange={(e) => setDesignation(e.target.value)}
-          placeholder="Counselor designation"
-          disabled={!isAdmin} // only admin can edit designation
-        />
-
-        <Input
-          label="Department"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          placeholder="Counselor department"
-          disabled={!isAdmin} // only admin can edit department
-        />
-
+        <Input label="Phone Number" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" />
+        <Input label="Profile Photo URL" value={photo} onChange={(e) => setPhoto(e.target.value)} placeholder="https://..." />
+        <Input label="Designation" value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="Counselor designation" disabled={!isAdmin} />
+        <Input label="Department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Counselor department" disabled={!isAdmin} />
         <div className="flex justify-end pt-3">
-          <Button type="submit" variant="secondary" isLoading={isSubmitting}>
-            Save Profile Settings
-          </Button>
+          <Button type="submit" variant="secondary" isLoading={isSubmitting}>Save Profile Settings</Button>
         </div>
       </form>
     </Card>
   );
 };
 
-// ── 7. Top-Level Employees Page Component ─────────
+
+// ── 8. Main Employee Management Page ─────────────
 export const EmployeeManagement = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  // BUG FIX: Always initialize to 'profile' (safe default) to avoid the race
-  // condition where user is null on first render. A separate useEffect below
-  // syncs this to 'directory' once the admin role is confirmed from the API.
   const [activeTab, setActiveTab] = useState('profile');
 
-  // BUG FIX: Sync activeTab to 'directory' once admin role is confirmed.
-  // This handles the async auth check in AuthContext that resolves after mount.
   useEffect(() => {
-    if (isAdmin) {
-      setActiveTab('directory');
-    }
+    if (isAdmin) setActiveTab('directory');
   }, [isAdmin]);
 
   // List states
   const [employees, setEmployees] = useState([]);
-  // BUG FIX: Initialize isLoading to false. The loading state is managed
-  // entirely inside fetchEmployees which guards on isAdmin first — preventing
-  // counselors from being stuck with isLoading=true indefinitely.
   const [isLoading, setIsLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -498,24 +705,19 @@ export const EmployeeManagement = () => {
   const [activeEmployee, setActiveEmployee] = useState(null);
   const [detailsEmployee, setDetailsEmployee] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [transferTarget, setTransferTarget] = useState(null);
-  const [transferEmployeeId, setTransferEmployeeId] = useState('');
+  const [archiveModal, setArchiveModal] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
-  const [archiveModal, setArchiveModal] = useState(null);
-  const [archiveReason, setArchiveReason] = useState('Annual Leave');
-  const [leaveStart, setLeaveStart] = useState('');
-  const [leaveEnd, setLeaveEnd] = useState('');
-  const [archiveHasApplicants, setArchiveHasApplicants] = useState(false);
-  const [archiveTransferTo, setArchiveTransferTo] = useState('');
+  const [passwordResetTarget, setPasswordResetTarget] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [newCredentials, setNewCredentials] = useState(null);
 
-  // Deep-link: detect ?view=add from URL (used by Dashboard quick action)
+  // Deep-link
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get('view') || 'list';
   const editId = searchParams.get('id');
+  const navigate = useNavigate();
 
-  // If action=add is in URL (legacy deep-link from Dashboard), redirect to view=add
   useEffect(() => {
     if (searchParams.get('action') === 'add' && isAdmin) {
       searchParams.delete('action');
@@ -524,41 +726,40 @@ export const EmployeeManagement = () => {
     }
   }, [isAdmin]);
 
-  // Sync activeEmployee if edit view is requested directly via URL query params
   useEffect(() => {
     if (view === 'edit' && editId && !activeEmployee && employees.length > 0) {
       const emp = employees.find(e => e.id === Number(editId) || e.id === editId);
-      if (emp) {
-        setActiveEmployee(emp);
-      } else {
-        // Fallback if employee is not found in local state list
-        navigate('/employees');
-      }
+      if (emp) setActiveEmployee(emp);
+      else navigate('/employees');
     }
   }, [view, editId, employees, activeEmployee]);
-
-  // Reset Credentials Card
-  const [newCredentials, setNewCredentials] = useState(null);
 
   const fetchEmployees = async () => {
     if (!isAdmin) return;
     try {
       setIsLoading(true);
-      const is_active_val = status === 'active' ? true : status === 'inactive' ? false : undefined;
+      let isActiveVal;
+      let includeArchived = false;
+      if (status === 'active') isActiveVal = true;
+      else if (status === 'inactive') { isActiveVal = false; includeArchived = true; }
+      else if (status === 'archived') { isActiveVal = undefined; includeArchived = true; }
+      else { isActiveVal = undefined; }
+
       const res = await api.get('/employees', {
         params: {
           search: search || undefined,
           role: role || undefined,
           department: dept || undefined,
-          is_active: is_active_val,
+          is_active: isActiveVal,
+          include_archived: includeArchived,
           page
         }
       });
       if (res.data && res.data.success) {
         setEmployees(res.data.data.items || []);
-        setTotalCount(res.data.data.total || res.data.data.total_count || 0);
+        setTotalCount(res.data.data.total || 0);
       }
-    } catch (err) {
+    } catch {
       toast.error('Failed to load staff directory.');
     } finally {
       setIsLoading(false);
@@ -577,25 +778,63 @@ export const EmployeeManagement = () => {
     setPage(1);
   };
 
-  const handleStatusToggle = async (emp) => {
-    if (emp.id === user?.id) {
-      toast.error('You cannot deactivate your own account.');
-      return;
+  const handleArchiveEmployee = (emp) => {
+    setArchiveModal(emp);
+  };
+
+  const handleConfirmArchive = async (archiveData) => {
+    if (!archiveModal) return;
+    try {
+      setIsSubmitting(true);
+      const res = await api.patch(`/employees/${archiveModal.id}/archive`, archiveData);
+      if (res.data?.success) {
+        const result = res.data.data?.archive_result || {};
+        const reassignMsg = result.reassignment
+          ? ` ${result.reassignment.total_transferred || ''} applicant(s) reassigned.`
+          : '';
+        toast.success(`"${archiveModal.full_name}" archived.${reassignMsg}`);
+        setArchiveModal(null);
+        fetchEmployees();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to archive employee.');
+    } finally {
+      setIsSubmitting(false);
     }
-    const nextStatus = !emp.is_active;
+  };
+
+  const handleRestoreEmployee = (emp) => {
     setConfirmAction({
-      title: nextStatus ? 'Activate Employee' : 'Deactivate Employee',
-      message: `Are you sure you want to ${nextStatus ? 'activate' : 'deactivate'} "${emp.full_name}"?`,
-      confirmText: nextStatus ? 'Activate' : 'Deactivate',
-      confirmVariant: nextStatus ? 'primary' : 'warning',
+      title: 'Restore Employee',
+      message: `Are you sure you want to restore "${emp.full_name}"? They will be reactivated.`,
+      warning: emp.archived_reason ? `Previous archive reason: ${emp.archived_reason}` : undefined,
+      confirmText: 'Restore',
+      confirmVariant: 'primary',
       employee: emp,
-      action: 'status',
-      payload: { is_active: nextStatus },
+      action: 'restore',
     });
   };
 
-  const [passwordResetTarget, setPasswordResetTarget] = useState(null);
-  const [newPassword, setNewPassword] = useState('');
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    setConfirmLoading(true);
+    const emp = confirmAction.employee;
+    try {
+      if (confirmAction.action === 'restore') {
+        const res = await api.patch(`/employees/${emp.id}/unarchive`);
+        if (res.data?.success) toast.success(`"${emp.full_name}" restored.`);
+      } else if (confirmAction.action === 'status') {
+        const res = await api.patch(`/employees/${emp.id}/status`, confirmAction.payload);
+        if (res.data?.success) toast.success(`"${emp.full_name}" status updated.`);
+      }
+      setConfirmAction(null);
+      fetchEmployees();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Action failed.');
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
 
   const handlePasswordReset = async () => {
     const emp = passwordResetTarget;
@@ -604,7 +843,6 @@ export const EmployeeManagement = () => {
       toast.error('Password must be at least 6 characters long.');
       return;
     }
-
     try {
       const res = await api.patch(`/employees/${emp.id}/reset-password`, { password: newPassword });
       if (res.data && res.data.success) {
@@ -617,156 +855,20 @@ export const EmployeeManagement = () => {
     }
   };
 
-  const handleArchiveEmployee = async (emp) => {
-    setArchiveReason('Annual Leave');
-    setLeaveStart('');
-    setLeaveEnd('');
-    setArchiveTransferTo('');
-    // Check if employee has assigned applicants
-    try {
-      const res = await api.get(`/applicants?assigned_to=${emp.id}&page_size=1`);
-      setArchiveHasApplicants((res.data?.data?.total || 0) > 0);
-    } catch {
-      setArchiveHasApplicants(false);
-    }
-    setArchiveModal(emp);
-  };
-
-  const handleConfirmArchive = async () => {
-    if (!archiveModal) return;
-    setConfirmLoading(true);
-    try {
-      // First transfer if needed
-      if (archiveHasApplicants && archiveTransferTo) {
-        await api.post(`/employees/${archiveModal.id}/transfer-applicants`, {
-          target_employee_id: Number(archiveTransferTo)
-        });
-      }
-      // Then archive
-      const res = await api.patch(`/employees/${archiveModal.id}/archive`, {
-        reason: archiveReason,
-        leave_start: leaveStart || null,
-        leave_end: leaveEnd || null,
-      });
-      if (res.data?.success) {
-        toast.success(`"${archiveModal.full_name}" archived.` + (archiveHasApplicants && archiveTransferTo ? ' Applicants transferred.' : ''));
-        setArchiveModal(null);
-        fetchEmployees();
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to archive employee.');
-    } finally {
-      setConfirmLoading(false);
-    }
-  };
-
-  const handleRestoreEmployee = (emp) => {
-    setConfirmAction({
-      title: 'Restore Employee',
-      message: `Are you sure you want to restore "${emp.full_name}"? They will be reactivated.`,
-      confirmText: 'Restore',
-      confirmVariant: 'primary',
-      employee: emp,
-      action: 'restore',
-    });
-  };
-
-  const handleDeleteEmployee = async (emp) => {
-    setDeleteTarget(emp);
-    try {
-      const res = await api.get(`/applicants?assigned_to=${emp.id}&page_size=1`);
-      const assignedCount = res.data?.data?.total || 0;
-      if (assignedCount > 0) {
-        setTransferTarget(emp);
-        setTransferEmployeeId('');
-      } else {
-        setConfirmAction({
-          title: 'Delete Employee',
-          message: `Are you sure you want to permanently delete "${emp.full_name}"?`,
-          warning: 'This action cannot be undone. The employee record will be permanently removed.',
-          confirmText: 'Delete',
-          confirmVariant: 'danger',
-          employee: emp,
-          action: 'delete',
-        });
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to check employee assignments.');
-    }
-  };
-
-  const handleConfirmAction = async () => {
-    if (!confirmAction) return;
-    setConfirmLoading(true);
-    const emp = confirmAction.employee;
-    try {
-      if (confirmAction.action === 'archive') {
-        const res = await api.patch(`/employees/${emp.id}/archive`);
-        if (res.data?.success) toast.success(`"${emp.full_name}" archived.`);
-      } else if (confirmAction.action === 'restore') {
-        const res = await api.patch(`/employees/${emp.id}/unarchive`);
-        if (res.data?.success) toast.success(`"${emp.full_name}" restored.`);
-      } else if (confirmAction.action === 'delete') {
-        const res = await api.delete(`/employees/${emp.id}`);
-        if (res.data?.success) {
-          toast.success(`"${emp.full_name}" deleted permanently.`);
-          setDeleteTarget(null);
-        }
-      } else if (confirmAction.action === 'status') {
-        const res = await api.patch(`/employees/${emp.id}/status`, confirmAction.payload);
-        if (res.data?.success) toast.success(`"${emp.full_name}" status updated.`);
-      }
-      setConfirmAction(null);
-      fetchEmployees();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || err.response?.data?.message || `Failed to ${confirmAction.action} employee.`);
-    } finally {
-      setConfirmLoading(false);
-    }
-  };
-
-  const handleTransferAndDelete = async () => {
-    if (!transferTarget || !transferEmployeeId) {
-      toast.error('Please select a replacement employee.');
-      return;
-    }
-    try {
-      // Transfer applicants
-      const transferRes = await api.post(`/employees/${transferTarget.id}/transfer-applicants`, {
-        target_employee_id: Number(transferEmployeeId)
-      });
-      if (transferRes.data && transferRes.data.success) {
-        // Delete the employee
-        const delRes = await api.delete(`/employees/${transferTarget.id}`);
-        if (delRes.data && delRes.data.success) {
-          toast.success(`Applicants transferred and "${transferTarget.full_name}" deleted permanently.`);
-          setTransferTarget(null);
-          setTransferEmployeeId('');
-          setDeleteTarget(null);
-          fetchEmployees();
-        }
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to transfer and delete.');
-    }
-  };
-
   const handleFormSubmit = async (payload) => {
     setIsSubmitting(true);
     try {
       if (activeEmployee) {
-        // Edit Employee
         const res = await api.put(`/employees/${activeEmployee.id}`, payload);
-        if (res.data && res.data.success) {
+        if (res.data?.success) {
           toast.success('Employee updated.');
           setSearchParams({ view: 'list' });
           setActiveEmployee(null);
           fetchEmployees();
         }
       } else {
-        // Create Employee
         const res = await api.post('/employees', payload);
-        if (res.data && res.data.success) {
+        if (res.data?.success) {
           toast.success('Employee provisioned successfully.');
           setNewCredentials({
             name: payload.full_name,
@@ -779,7 +881,7 @@ export const EmployeeManagement = () => {
         }
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to save employee profile.');
+      toast.error(err.response?.data?.detail || 'Failed to save employee.');
     } finally {
       setIsSubmitting(false);
     }
@@ -792,16 +894,14 @@ export const EmployeeManagement = () => {
     toast.success('Credentials copied to clipboard!');
   };
 
-  // ── RENDER: Add/Edit Full-Page Form View ──────────
+  // ── RENDER: Add/Edit Full-Page Form View ──────
   if (view === 'add' || view === 'edit') {
-    if (!isAdmin) {
-      return <Navigate to="/403" replace />;
-    }
+    if (!isAdmin) return <Navigate to="/403" replace />;
     return (
       <div className="space-y-6 text-left animate-fade-in">
         <PageHeader
           title={view === 'add' ? 'Add Staff Account' : 'Edit Staff Account'}
-          subtitle={view === 'add' ? 'Provision a new staff member with CRM access credentials' : `Updating staff profile`}
+          subtitle={view === 'add' ? 'Provision a new staff member with CRM access credentials' : 'Updating staff profile'}
           breadcrumbs={[
             { label: 'Home', path: '/dashboard' },
             { label: 'Employees', path: '/employees' },
@@ -809,59 +909,50 @@ export const EmployeeManagement = () => {
           ]}
         />
         <Card>
-          <EmployeeForm
-            employee={activeEmployee}
-            isSubmitting={isSubmitting}
-            onSubmit={handleFormSubmit}
-            onCancel={() => { setActiveEmployee(null); navigate('/employees'); }}
-          />
+          <EmployeeForm employee={activeEmployee} isSubmitting={isSubmitting} onSubmit={handleFormSubmit}
+            onCancel={() => { setActiveEmployee(null); navigate('/employees'); }} />
         </Card>
       </div>
     );
   }
 
-  // ── RENDER: Main Directory / Profile View ────────
+  // ── RENDER: Main Directory / Profile View ────
   return (
     <div className="space-y-6 text-left">
-      <PageHeader 
-        title="Employee Registry" 
+      <PageHeader
+        title="Employee Registry"
         subtitle="Manage access, credentials, and portfolios for staff advisors"
         breadcrumbs={[{ label: 'Home', path: '/dashboard' }, { label: 'Employees' }]}
         action={
           isAdmin && activeTab === 'directory' && (
-            <Button onClick={() => { setActiveEmployee(null); setSearchParams({ view: 'add' }); }} variant="secondary" className="flex items-center gap-2">
+            <Button onClick={() => { setActiveEmployee(null); setSearchParams({ view: 'add' }); }}
+              variant="secondary" className="flex items-center gap-2">
               <Plus size={15} /> Add Staff Account
             </Button>
           )
         }
       />
 
-      {/* Tab Switcher Headers */}
+      {/* Tab Switcher */}
       <div className="flex border-b border-slate-100 gap-6">
         {isAdmin && (
-          <button
-            onClick={() => setActiveTab('directory')}
+          <button onClick={() => setActiveTab('directory')}
             className={`pb-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
               activeTab === 'directory' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
+            }`}>
             Staff Directory
           </button>
         )}
-        <button
-          onClick={() => setActiveTab('profile')}
+        <button onClick={() => setActiveTab('profile')}
           className={`pb-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
             activeTab === 'profile' ? 'border-brand-orange text-brand-orange' : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
+          }`}>
           My Profile
         </button>
       </div>
 
-      {/* Tab content conditional rendering */}
       {activeTab === 'directory' && isAdmin && (
         <div className="space-y-5">
-          {/* Newly created employee creds card banner */}
           {newCredentials && (
             <div className="p-4 border border-emerald-100 bg-emerald-50/50 backdrop-blur-md rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-scale-up">
               <div className="flex gap-3">
@@ -879,11 +970,8 @@ export const EmployeeManagement = () => {
                 <Button onClick={copyCredsToClipboard} variant="outline" className="text-xs flex items-center gap-1.5">
                   <Copy size={12} /> Copy
                 </Button>
-                <button
-                  onClick={() => setNewCredentials(null)}
-                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all"
-                  title="Dismiss"
-                >
+                <button onClick={() => setNewCredentials(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all">
                   <X size={14} />
                 </button>
               </div>
@@ -900,9 +988,7 @@ export const EmployeeManagement = () => {
 
           <Card>
             {isLoading ? (
-              <div className="py-24 flex justify-center">
-                <LoadingSpinner label="Loading employee directory..." />
-              </div>
+              <div className="py-24 flex justify-center"><LoadingSpinner label="Loading employee directory..." /></div>
             ) : employees.length === 0 ? (
               <EmptyState title="No Employees Found" description="Adjust your filters or create a new staff account." />
             ) : (
@@ -920,16 +1006,26 @@ export const EmployeeManagement = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-50 text-sm">
                     {employees.map((emp) => (
-                      <tr key={emp.id} className="group hover:bg-slate-50/50 transition-colors cursor-pointer"
+                      <tr key={emp.id} className={`group hover:bg-slate-50/50 transition-colors cursor-pointer ${
+                        emp.archived_at ? 'opacity-60 hover:opacity-80' : ''
+                      }`}
                           onClick={() => setDetailsEmployee(emp)}>
                         <td className="py-4 px-4">
-                          <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 border border-slate-200/60 px-2 py-1 rounded">
+                          <span className={`text-xs font-mono font-bold px-2 py-1 rounded ${
+                            emp.archived_at
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200/60'
+                          }`}>
                             {emp.employee_code || 'EMP-NEW'}
                           </span>
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-xs shrink-0">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                              emp.archived_at
+                                ? 'bg-slate-200 text-slate-400'
+                                : 'bg-brand-orange/10 text-brand-orange'
+                            }`}>
                               {emp.full_name?.substring(0, 2).toUpperCase() || 'ST'}
                             </div>
                             <div className="flex flex-col text-left">
@@ -940,8 +1036,8 @@ export const EmployeeManagement = () => {
                         </td>
                         <td className="py-4 px-4">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
-                            emp.role === 'admin' 
-                              ? 'text-rose-600 bg-rose-50 border-rose-100' 
+                            emp.role === 'admin'
+                              ? 'text-rose-600 bg-rose-50 border-rose-100'
                               : 'text-sky-600 bg-sky-50 border-sky-100'
                           }`}>
                             <ShieldAlert size={10} />
@@ -955,60 +1051,37 @@ export const EmployeeManagement = () => {
                           </div>
                         </td>
                         <td className="py-4 px-4">
-                          <EmployeeStatusBadge isActive={emp.is_active} />
+                          <EmployeeStatusBadge isActive={emp.is_active} archivedAt={emp.archived_at} />
+                          {emp.archived_reason && (
+                            <p className="text-[9px] text-slate-400 mt-0.5">{emp.archived_reason}</p>
+                          )}
                         </td>
                         <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {/* View */}
-                            <button
-                              onClick={() => setDetailsEmployee(emp)}
-                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all"
-                            >
+                            <button onClick={() => setDetailsEmployee(emp)}
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-all">
                               View
                             </button>
-
-                            {/* Edit */}
-                            <button
-                              onClick={() => { setActiveEmployee(emp); setSearchParams({ view: 'edit', id: emp.id }); }}
-                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 transition-all"
-                            >
+                            <button onClick={() => { setActiveEmployee(emp); setSearchParams({ view: 'edit', id: emp.id }); }}
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg bg-brand-orange text-white hover:bg-brand-orange/90 transition-all">
                               Edit
                             </button>
-
-                            {/* Reset Password */}
-                            <button
-                              onClick={() => setPasswordResetTarget(emp)}
-                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100 transition-all"
-                            >
+                            <button onClick={() => setPasswordResetTarget(emp)}
+                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-purple-200 text-purple-600 bg-purple-50 hover:bg-purple-100 transition-all">
                               Password
                             </button>
-
-                            {/* Archive / Restore */}
-                            {emp.is_active ? (
-                              <button
-                                onClick={() => handleArchiveEmployee(emp)}
+                            {!emp.archived_at ? (
+                              <button onClick={() => handleArchiveEmployee(emp)}
                                 disabled={emp.id === user?.id}
-                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100 transition-all disabled:opacity-40"
-                              >
+                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100 transition-all disabled:opacity-40">
                                 Archive
                               </button>
                             ) : (
-                              <button
-                                onClick={() => handleRestoreEmployee(emp)}
-                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-all"
-                              >
+                              <button onClick={() => handleRestoreEmployee(emp)}
+                                className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-all">
                                 Restore
                               </button>
                             )}
-
-                            {/* Delete */}
-                            <button
-                              onClick={() => handleDeleteEmployee(emp)}
-                              disabled={emp.id === user?.id}
-                              className="px-2.5 py-1.5 text-[10px] font-bold rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-all disabled:opacity-40"
-                            >
-                              Delete
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1021,126 +1094,21 @@ export const EmployeeManagement = () => {
         </div>
       )}
 
-      {activeTab === 'profile' && (
-        <EmployeeProfile currentUser={user} />
-      )}
+      {activeTab === 'profile' && <EmployeeProfile currentUser={user} />}
 
-      {/* Details drawer overlay */}
       {detailsEmployee && (
-        <EmployeeDetailsDrawer
-          employee={detailsEmployee}
-          onClose={() => setDetailsEmployee(null)}
-        />
-      )}
-
-      {/* Transfer & Delete Modal */}
-      {transferTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div onClick={() => { setTransferTarget(null); setDeleteTarget(null); }} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 text-left z-10">
-            <h3 className="text-sm font-bold text-slate-800">Transfer Applicants & Delete Employee</h3>
-            <p className="text-xs text-slate-500 mt-2">
-              This employee has assigned applicants. Select a replacement employee to transfer them to before deletion.
-            </p>
-            <div className="mt-4">
-              <label className="text-xs font-bold text-slate-600 block mb-1.5">Transfer to:</label>
-              <select
-                value={transferEmployeeId}
-                onChange={(e) => setTransferEmployeeId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-brand-orange"
-              >
-                <option value="">Select employee...</option>
-                {employees
-                  .filter(e => e.id !== transferTarget.id && e.is_active)
-                  .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
-                  .map(e => (
-                    <option key={e.id} value={e.id}>{e.full_name}</option>
-                  ))
-                }
-              </select>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => { setTransferTarget(null); setDeleteTarget(null); }}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all">
-                Cancel
-              </button>
-              <button onClick={handleTransferAndDelete}
-                disabled={!transferEmployeeId}
-                className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white text-xs font-bold hover:bg-red-600 transition-all disabled:opacity-50">
-                Transfer & Delete
-              </button>
-            </div>
-          </div>
-        </div>
+        <EmployeeDetailsDrawer employee={detailsEmployee} onClose={() => setDetailsEmployee(null)} />
       )}
 
       {/* Archive Modal */}
       {archiveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setArchiveModal(null)} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
-          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 text-left z-10">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2.5 rounded-full bg-amber-50 text-amber-500"><UserX size={24} /></div>
-              <h3 className="text-sm font-bold text-slate-800">Archive Employee</h3>
-            </div>
-            <p className="text-xs text-slate-600 mb-4">
-              {archiveHasApplicants
-                ? `"${archiveModal.full_name}" currently manages active applicants.`
-                : `Archive "${archiveModal.full_name}"? They will not receive new applicants during leave.`}
-            </p>
-
-            {/* Reason */}
-            <div className="mb-3">
-              <label className="text-xs font-bold text-slate-600 block mb-1">Reason</label>
-              <select value={archiveReason} onChange={(e) => setArchiveReason(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-brand-orange">
-                <option>Annual Leave</option>
-                <option>Sick Leave</option>
-                <option>Personal Leave</option>
-                <option>Training</option>
-                <option>Suspension</option>
-                <option>Resigned</option>
-                <option>Other</option>
-              </select>
-            </div>
-
-            {/* Leave dates */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Leave Start</label>
-                <input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-orange" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Leave End</label>
-                <input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-orange" />
-              </div>
-            </div>
-
-            {/* Transfer if has applicants */}
-            {archiveHasApplicants && (
-              <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
-                <p className="text-xs font-bold text-amber-800 mb-2">Transfer Applicants</p>
-                <select value={archiveTransferTo} onChange={(e) => setArchiveTransferTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-amber-200 rounded-xl text-xs outline-none focus:border-amber-500">
-                  <option value="">Select employee...</option>
-                  {employees.filter(e => e.id !== archiveModal.id && e.is_active).sort((a,b) => (a.full_name||'').localeCompare(b.full_name||'')).map(e => (
-                    <option key={e.id} value={e.id}>{e.full_name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="flex gap-3 mt-4">
-              <button onClick={() => setArchiveModal(null)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all">Cancel</button>
-              <button onClick={handleConfirmArchive} disabled={confirmLoading || (archiveHasApplicants && !archiveTransferTo)}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-all disabled:opacity-50">
-                {confirmLoading ? 'Processing...' : archiveHasApplicants ? 'Transfer & Archive' : 'Archive Employee'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ArchiveEmployeeModal
+          employee={archiveModal}
+          employees={employees}
+          loading={isSubmitting}
+          onClose={() => setArchiveModal(null)}
+          onConfirm={handleConfirmArchive}
+        />
       )}
 
       {/* Confirmation Modal */}
@@ -1183,6 +1151,5 @@ export const EmployeeManagement = () => {
     </div>
   );
 };
-
 
 export default EmployeeManagement;

@@ -5,7 +5,18 @@ Pydantic models for employee serialization, creation, updates, and profile manag
 """
 
 from datetime import datetime
+from enum import Enum
 from pydantic import BaseModel, EmailStr, Field
+
+
+class ArchiveReason(str, Enum):
+    """Controlled list of archive reasons."""
+    ANNUAL_LEAVE = "Annual Leave"
+    SICK_LEAVE = "Sick Leave"
+    PERSONAL_LEAVE = "Personal Leave"
+    RESIGNED = "Resigned"
+    TERMINATED = "Terminated"
+    INACTIVE = "Inactive"
 
 
 class EmployeeOut(BaseModel):
@@ -66,11 +77,20 @@ class EmployeeProfileUpdate(BaseModel):
     profile_photo: str | None = None
 
 
-class ArchiveRequest(BaseModel):
-    """Schema for archiving an employee with reason and optional dates."""
-    reason: str = Field(default="Other", max_length=100)
+class EmployeeArchiveRequest(BaseModel):
+    """Schema for archiving an employee with reason, optional leave dates,
+    and optional applicant reassignment."""
+    reason: str = Field(default="Inactive", max_length=100)
     leave_start: str | None = Field(default=None, description="Leave start date (YYYY-MM-DD)")
     leave_end: str | None = Field(default=None, description="Leave end date (YYYY-MM-DD)")
+    reassignment_mode: str | None = Field(
+        default=None,
+        description="'auto' to distribute evenly, 'manual' to assign all to target_employee_id"
+    )
+    target_employee_id: int | None = Field(
+        default=None,
+        description="Required when reassignment_mode='manual'"
+    )
 
 
 class EmployeeStatusUpdate(BaseModel):
