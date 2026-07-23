@@ -19,3 +19,4 @@ from app.models.lead_inquiry import LeadInquiry  # noqa: F401
 from app.models.lead_activity import LeadActivity  # noqa: F401
 from app.models.lead_note import LeadNote  # noqa: F401
 from app.models.assignment_request import AssignmentRequest  # noqa: F401
+from app.models.audit_log import AuditLog  # noqa: F401
