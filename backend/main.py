@@ -51,6 +51,8 @@ app = FastAPI(
     redirect_slashes=False,
 )
 
+logger.info("Configuration loaded — environment: %s, debug: %s", settings.ENVIRONMENT, settings.DEBUG)
+
 
 # ── Startup: Auto-run database migrations ───────
 
@@ -62,9 +64,8 @@ def run_database_migrations():
     SQLAlchemy models. Runs 'alembic upgrade head' which applies ALL
     pending migrations in order.
 
-    If migration fails, the application logs the error and raises a
-    RuntimeError, which prevents the server from starting. This ensures
-    the application NEVER runs with an outdated database schema.
+    If migration fails, the app still starts but /ready returns 503.
+    This avoids crash loops on transient database issues.
     """
     logger.info("Running database migrations...")
     result = subprocess.run(
@@ -131,6 +132,12 @@ app.include_router(lead_notes_crud_router, prefix=f"{settings.API_PREFIX}/notes"
 app.include_router(assignment_requests_router, prefix=f"{settings.API_PREFIX}/assignment-requests", tags=["Assignment Requests"])
 
 # ── Health / Liveness / Readiness ────────────────
+
+num_routes = len([r for r in app.routes if hasattr(r, 'methods')])
+logger.info(
+    "Application started — %d routes registered, health endpoint ready",
+    num_routes,
+)
 
 @app.get("/health", tags=["Infrastructure"])
 def health_check():

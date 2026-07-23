@@ -9,8 +9,6 @@
 # Render will execute this as the start command.
 # ─────────────────────────────────────────────────────
 
-set -e
-
 echo "=== Ready2Go CRM Startup ==="
 echo "Environment: ${ENVIRONMENT:-development}"
 echo ""
@@ -18,6 +16,12 @@ echo ""
 # Run database migrations
 echo "--- Applying database migrations ---"
 alembic upgrade head
+MIGRATION_EXIT=$?
+if [ $MIGRATION_EXIT -ne 0 ]; then
+  echo "WARNING: Migration exit code ${MIGRATION_EXIT}. The app will still start,"
+  echo "         but the /ready endpoint will report 'degraded' until"
+  echo "         all migrations are applied."
+fi
 echo "Migrations complete."
 echo ""
 

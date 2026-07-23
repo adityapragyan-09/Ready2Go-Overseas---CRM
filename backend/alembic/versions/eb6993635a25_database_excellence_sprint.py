@@ -1,41 +1,21 @@
-"""Database Excellence Sprint — Index & constraint optimization
+"""Database Excellence Sprint — Index & constraint optimization (Phase 2)
 
-SAFE OPERATIONS (cross-dialect, no data risk):
-  1. ADD composite indexes for documented query patterns (6 new)
-  2. REMOVE redundant indexes confirmed as strict prefixes (4 removed)
-  3. ADD missing unique constraints from model declarations (2 added)
+Chains after `10b64bf0996f` which already added 2 composite indexes and 2
+unique constraints. This migration adds the remaining 4 query-pattern composite
+indexes and removes 4 redundant single-column indexes that are strict prefixes
+of now-existing composite indexes.
 
-=== 1. NEW COMPOSITE INDEXES ===
-  ix_activity_logs_user_login       — activity_logs(user_id, login_time)
-  ix_activity_logs_login_logout     — activity_logs(login_time, logout_time)
+=== 1. NEW COMPOSITE INDEXES (4) ===
   ix_documents_applicant_active     — documents(applicant_id, is_deleted)
   ix_applicants_employee_workload   — applicants(is_deleted, assigned_to, created_at)
   ix_lead_inquiries_employee_status — lead_inquiries(assigned_employee_id, status)
   ix_assignment_requests_emp_status — assignment_requests(employee_id, status)
 
-=== 2. REDUNDANT INDEXES REMOVED ===
-  ix_messages_applicant_id          ← covered by ix_messages_applicant_id_created_at
-  ix_notifications_recipient_user_id← covered by ix_notifications_recipient_is_read_created_at
-  ix_progress_history_applicant_id  ← covered by ix_progress_history_applicant_id_updated_at
-  ix_lead_notes_lead_id             ← covered by ix_lead_notes_lead_created
-
-=== 3. NEW UNIQUE CONSTRAINTS ===
-  uq_lead_notes_uuid               — model says unique=True, migration omitted it
-  uq_assignment_requests_uuid      — model says unique=True, migration omitted it
-
-=== 4. FK ONDELETE CONSISTENCY (11 documented — see migration source) ===
-
-=== 1. NEW COMPOSITE INDEXES ===
-  ix_documents_applicant_active     — documents(applicant_id, is_deleted)
-  ix_applicants_employee_workload   — applicants(is_deleted, assigned_to, created_at)
-  ix_lead_inquiries_employee_status — lead_inquiries(assigned_employee_id, status)
-  ix_assignment_requests_emp_status — assignment_requests(employee_id, status)
-
-=== 2. REDUNDANT INDEXES REMOVED ===
-  ix_messages_applicant_id          ← covered by ix_messages_applicant_id_created_at
-  ix_notifications_recipient_user_id← covered by ix_notifications_recipient_is_read_created_at
-  ix_progress_history_applicant_id  ← covered by ix_progress_history_applicant_id_updated_at
-  ix_lead_notes_lead_id             ← covered by ix_lead_notes_lead_created
+=== 2. REDUNDANT INDEXES REMOVED (4) ===
+  ix_messages_applicant_id          — covered by ix_messages_applicant_id_created_at
+  ix_notifications_recipient_user_id— covered by ix_notifications_recipient_is_read_created_at
+  ix_progress_history_applicant_id  — covered by ix_progress_history_applicant_id_updated_at
+  ix_lead_notes_lead_id             — covered by ix_lead_notes_lead_created
 
 === 3. FK ONDELETE CONSISTENCY ===
   The following 11 FK constraints need ondelete clauses to match models.
@@ -89,7 +69,7 @@ SAFE OPERATIONS (cross-dialect, no data risk):
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
 
 Revision ID: eb6993635a25
-Revises: f2f8d2e51e10
+Revises: 10b64bf0996f
 """
 from typing import Sequence, Union
 
@@ -97,29 +77,13 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "eb6993635a25"
-down_revision: Union[str, None] = "f2f8d2e51e10"
+down_revision: Union[str, None] = "10b64bf0996f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # ── 1. MODEL __table_args__ INDEXES (missing from original migrations) ──
-    op.create_index(
-        "ix_activity_logs_user_login", "activity_logs",
-        ["user_id", "login_time"], unique=False,
-    )
-    op.create_index(
-        "ix_activity_logs_login_logout", "activity_logs",
-        ["login_time", "logout_time"], unique=False,
-    )
-
-    # ── 2. MISSING UNIQUE CONSTRAINTS ────────────────────
-    with op.batch_alter_table("lead_notes") as batch_op:
-        batch_op.create_unique_constraint("uq_lead_notes_uuid", ["uuid"])
-    with op.batch_alter_table("assignment_requests") as batch_op:
-        batch_op.create_unique_constraint("uq_assignment_requests_uuid", ["uuid"])
-
-    # ── 3. NEW COMPOSITE INDEXES (query-pattern-optimized) ──
+    # ── 1. NEW COMPOSITE INDEXES (query-pattern-optimized) ──
     # Documents: list_applicant_documents filters by applicant_id + is_deleted=False
     op.create_index(
         "ix_documents_applicant_active", "documents",
@@ -155,16 +119,6 @@ def downgrade() -> None:
     op.drop_index("ix_lead_inquiries_employee_status", table_name="lead_inquiries")
     op.drop_index("ix_applicants_employee_workload", table_name="applicants")
     op.drop_index("ix_documents_applicant_active", table_name="documents")
-
-    # Reverse unique constraints
-    with op.batch_alter_table("assignment_requests") as b:
-        b.drop_constraint("uq_assignment_requests_uuid", type_="unique")
-    with op.batch_alter_table("lead_notes") as b:
-        b.drop_constraint("uq_lead_notes_uuid", type_="unique")
-
-    # Reverse activity_logs indexes
-    op.drop_index("ix_activity_logs_login_logout", table_name="activity_logs")
-    op.drop_index("ix_activity_logs_user_login", table_name="activity_logs")
 
     # Restore removed indexes
     op.create_index("ix_messages_applicant_id", "messages", ["applicant_id"], unique=False)
