@@ -6,6 +6,7 @@ import {
   Search,
   Plus,
   UserPlus,
+  Bell,
   Activity,
   Database,
   Cloud,
