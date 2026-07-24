@@ -322,6 +322,7 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
 
     Returns an absolute ``https://`` signed URL ready for browser consumption.
     """
+    raw_input_path = storage_path
     storage_path = normalize_storage_path(storage_path)
 
     if settings.ENVIRONMENT in ("development", "test") or (
@@ -331,50 +332,132 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
         _safe_local_path(storage_path)
         return f"http://localhost:8000/uploads/{storage_path}"
 
+    supabase_origin = settings.SUPABASE_URL
+    bucket = settings.SUPABASE_BUCKET
+    encoded_path = urllib.parse.quote(storage_path, safe="/")
+    signed_url_endpoint = (
+        f"{supabase_origin}/storage/v1/object/sign/"
+        f"{bucket}/{encoded_path}"
+    )
+    request_body = {"expiresIn": expires_in}
+
     headers = _get_headers()
     headers["Content-Type"] = "application/json"
 
-    encoded_path = urllib.parse.quote(storage_path, safe="/")
-    signed_url_endpoint = (
-        f"{settings.SUPABASE_URL}/storage/v1/object/sign/"
-        f"{settings.SUPABASE_BUCKET}/{encoded_path}"
-    )
+    # ── Log everything before the request ─────────────────────────────
+    logger.info("=" * 70)
+    logger.info("SIGNED URL — FULL TRACE")
+    logger.info("=" * 70)
+    logger.info("  raw_input_path:       '%s'", raw_input_path)
+    logger.info("  normalized_path:      '%s'", storage_path)
+    logger.info("  bucket:               '%s'", bucket)
+    logger.info("  object_path:          '%s'", storage_path)
+    logger.info("  endpoint (raw):       %s", signed_url_endpoint)
+    logger.info("  endpoint (redacted):  %s",
+                signed_url_endpoint.replace(supabase_origin, "<origin>", 1))
+    logger.info("  method:               POST")
+    logger.info("  request_body:         %s", request_body)
+    # Log headers with secrets redacted
+    safe_headers = {k: (v[:20] + "..." if k == "Authorization" else v) for k, v in headers.items()}
+    logger.info("  request_headers:      %s", safe_headers)
 
-    request_body = {"expiresIn": expires_in}
-    supabase_origin = settings.SUPABASE_URL
+    # ── Make the request ──────────────────────────────────────────────
+    try:
+        response = requests.post(
+            signed_url_endpoint, json=request_body,
+            headers=headers, timeout=60,
+        )
 
-    logger.info("=== GENERATE SIGNED URL ===")
-    logger.info("  bucket=%s", settings.SUPABASE_BUCKET)
-    logger.info("  storage_path='%s'", storage_path)
-    logger.info("  expires_in=%s", expires_in)
-    logger.info("  POST %s", signed_url_endpoint.replace(supabase_origin, "<origin>", 1))
-    logger.info("  body=%s", request_body)
+        # ── Log everything after the request ──────────────────────────
+        logger.info("  response_status:      %s", response.status_code)
+        logger.info("  response_headers:     %s", dict(response.headers))
+        logger.info("  response_body:        %.3000s", response.text or "(empty)")
 
-    # ── Response parser (inline) ───────────────────────────────────────
-    def _extract_signed_url(response) -> str | None:
+        # ── Post-request: verify the object exists in the bucket ──────
+        parent_prefix = "/".join(storage_path.split("/")[:-1])
+        filename = storage_path.split("/")[-1]
+
+        logger.info("  verifying object at prefix '%s' ...", parent_prefix)
+        objects = list_storage_objects(prefix=parent_prefix, limit=200)
+        object_names = [o.get("name", "") for o in objects]
+
+        if filename in object_names:
+            logger.info("  OBJECT FOUND: '%s' in folder '%s'", filename, parent_prefix)
+        else:
+            logger.error("=" * 70)
+            logger.error("  OBJECT NOT FOUND !!!")
+            logger.error("  requested object:      '%s'", filename)
+            logger.error("  in folder:             '%s'", parent_prefix)
+            logger.error("  normalized path:       '%s'", storage_path)
+            logger.error("  all objects in folder: %s", object_names)
+            # Show every object with its character representation
+            for i, name in enumerate(object_names):
+                logger.error("    [%d] '%s' (len=%d, chars=%s)",
+                             i, name, len(name), [c for c in name])
+            logger.error("  requested file chars: %s", [c for c in filename])
+            # Check if the full path was used (bucket prefix)
+            bucket_prefixed = f"{bucket}/{filename}"
+            if bucket_prefixed in object_names:
+                logger.error("  >>> BUG: object found with bucket prefix: '%s'", bucket_prefixed)
+            # Check for name-within-full-path matches
+            for name in object_names:
+                if filename in name:
+                    logger.error("  >>> PARTIAL MATCH: '%s' contains '%s'", name, filename)
+            # Check if parent path has wrong prefix
+            full_prefix_variants = [
+                parent_prefix,
+                f"{bucket}/{parent_prefix}",
+            ]
+            for variant in full_prefix_variants:
+                variant_objects = list_storage_objects(prefix=variant, limit=200)
+                variant_names = [o.get("name", "") for o in variant_objects]
+                if filename in variant_names:
+                    logger.error(
+                        "  >>> FOUND under DIFFERENT prefix '%s': %s",
+                        variant, variant_names,
+                    )
+            logger.error("=" * 70)
+
+        # ── Extract signed URL from response ──────────────────────────
         raw_text = response.text or ""
-        logger.info("RESPONSE: status=%s body=%.2000s", response.status_code, raw_text)
 
         if response.status_code < 200 or response.status_code >= 300:
-            logger.error("Non-success status %s. body=%s", response.status_code, raw_text[:500])
-            return None
+            logger.error(
+                "  SIGNED URL FAILED: non-success status %s. body=%.3000s",
+                response.status_code, raw_text,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Storage signing request failed (HTTP {response.status_code}).",
+            )
 
         if not raw_text.strip():
-            logger.warning("Empty response body from status %s", response.status_code)
-            return None
+            logger.error("  SIGNED URL FAILED: empty response body")
+            raise HTTPException(
+                status_code=502,
+                detail="Storage returned an empty response.",
+            )
 
+        # Parse JSON
         try:
             data = response.json()
         except Exception:
             cleaned = raw_text.strip().strip('"').strip("'")
             if cleaned and (cleaned.startswith("http://") or cleaned.startswith("https://") or cleaned.startswith("/")):
-                logger.info("EXTRACTED as plain string: %s", cleaned[:120])
-                return cleaned
-            logger.warning("Response not JSON or URL: %.200s", raw_text)
-            return None
+                logger.info("  EXTRACTED as plain string: %s", cleaned[:120])
+                full_url = cleaned
+                if not full_url.startswith("http://") and not full_url.startswith("https://"):
+                    if full_url.startswith("/"):
+                        full_url = f"{supabase_origin}{full_url}"
+                    else:
+                        full_url = f"{supabase_origin}/{full_url}"
+                logger.info("  SIGNED URL: %s", full_url)
+                return full_url
+            logger.error("  SIGNED URL FAILED: response not JSON or URL: %.300s", raw_text)
+            raise HTTPException(status_code=502, detail="Unexpected response format from storage.")
 
+        # Flatten and search for signed URL
         flat = {}
-
         def _flatten(obj, prefix=""):
             if isinstance(obj, dict):
                 for k, v in obj.items():
@@ -384,52 +467,46 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
                     _flatten(v, f"{prefix}{i}.")
             else:
                 flat[prefix.rstrip(".")] = obj
-
         _flatten(data)
-        logger.info("PARSED JSON fields=%s", flat)
+        logger.info("  PARSED JSON fields: %s", flat)
 
         known_fields = [
             "signedURL", "signedUrl", "signed_url",
             "data.signedURL", "data.signedUrl", "data.signed_url",
             "url", "URL", "data",
         ]
+        raw_url = None
         for field in known_fields:
             val = flat.get(field) or (data.get(field) if isinstance(data, dict) else None)
             if val and isinstance(val, str) and (val.startswith("http") or val.startswith("/")):
-                logger.info("EXTRACTED from field '%s': %s", field, val[:120])
-                return val
+                logger.info("  EXTRACTED from field '%s': %s", field, val[:120])
+                raw_url = val
+                break
 
-        for k, v in flat.items():
-            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://") or v.startswith("/")):
-                if "token" in v or "sign" in v:
-                    logger.info("EXTRACTED (heuristic) from '%s': %s", k, v[:120])
-                    return v
+        if not raw_url:
+            for k, v in flat.items():
+                if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://") or v.startswith("/")):
+                    if "token" in v or "sign" in v:
+                        logger.info("  EXTRACTED (heuristic) from '%s': %s", k, v[:120])
+                        raw_url = v
+                        break
 
-        logger.error("Could not extract signed URL. Raw=%.2000s", raw_text)
-        return None
-
-    def _make_absolute(raw_url: str) -> str:
-        if raw_url.startswith("http://") or raw_url.startswith("https://"):
-            return raw_url
-        if raw_url.startswith("/"):
-            return f"{supabase_origin}{raw_url}"
-        return f"{supabase_origin}/{raw_url}"
-
-    # ── Call the single-object endpoint ────────────────────────────────
-    try:
-        response = requests.post(
-            signed_url_endpoint, json=request_body,
-            headers=headers, timeout=60,
-        )
-        raw_url = _extract_signed_url(response)
         if raw_url:
-            full_url = _make_absolute(raw_url)
-            logger.info("SIGNED URL SUCCESS: %s", full_url)
+            if raw_url.startswith("http://") or raw_url.startswith("https://"):
+                full_url = raw_url
+            elif raw_url.startswith("/"):
+                full_url = f"{supabase_origin}{raw_url}"
+            else:
+                full_url = f"{supabase_origin}/{raw_url}"
+            logger.info("  SIGNED URL: %s", full_url)
             return full_url
-    except requests.RequestException as e:
-        logger.warning("Signed URL network error: %s", e)
 
-    raise HTTPException(status_code=502, detail="Failed to generate document access URL.")
+        logger.error("  SIGNED URL FAILED: could not extract URL from response: %.2000s", raw_text)
+        raise HTTPException(status_code=502, detail="Could not extract signed URL from storage response.")
+
+    except requests.RequestException as e:
+        logger.exception("  SIGNED URL NETWORK ERROR: %s", e)
+        raise HTTPException(status_code=502, detail="Storage service is currently unavailable.")
 
 
 # ═══════════════════════════════════════════════════════════════════════
