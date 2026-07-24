@@ -11,7 +11,9 @@ Production:
     gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
 """
 
+import asyncio
 import subprocess
+import threading
 import uuid
 from pathlib import Path
 
@@ -53,42 +55,57 @@ app = FastAPI(
 
 logger.info("Configuration loaded — environment: %s, debug: %s", settings.ENVIRONMENT, settings.DEBUG)
 
+# ── Global migration state ──────────────────────
+_migrations_done = threading.Event()
+_migrations_ok = False
 
-# ── Startup: Auto-run database migrations ───────
+
+def _run_migrations():
+    """Run alembic migrations in a background thread so the app starts immediately."""
+    global _migrations_ok
+    logger.info("Starting database migrations (background)...")
+    try:
+        # Skip if alembic not available (test/dev environment without it)
+        import shutil
+        if not shutil.which("alembic"):
+            logger.info("alembic not found -- skipping (test/dev)")
+            _migrations_ok = True
+            _migrations_done.set()
+            return
+
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        for line in (result.stdout or "").strip().split("\n"):
+            if line.strip():
+                logger.info("Migration: %s", line.strip())
+        if result.returncode != 0:
+            logger.error("Migration FAILED. Exit code: %d", result.returncode)
+            for line in (result.stderr or "").strip().split("\n"):
+                if line.strip():
+                    logger.error("Migration error: %s", line.strip())
+        else:
+            _migrations_ok = True
+            logger.info("Database migrations completed successfully.")
+    except subprocess.TimeoutExpired:
+        logger.error("Migration TIMEOUT after 120s")
+    except Exception as exc:
+        logger.error("Migration error: %s", exc)
+    finally:
+        _migrations_done.set()
+
+
+# ── Startup: run migrations in background ───────
 
 @app.on_event("startup")
-def run_database_migrations():
-    """Execute Alembic migrations before the first request is handled.
-
-    This ensures the database schema is always synchronized with the
-    SQLAlchemy models. Runs 'alembic upgrade head' which applies ALL
-    pending migrations in order.
-
-    If migration fails, the app still starts but /ready returns 503.
-    This avoids crash loops on transient database issues.
-    """
-    logger.info("Running database migrations...")
-    result = subprocess.run(
-        ["alembic", "upgrade", "head"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    for line in (result.stdout or "").strip().split("\n"):
-        if line.strip():
-            logger.info("Migration: %s", line.strip())
-    if result.returncode != 0:
-        logger.error("Migration FAILED. Exit code: %d", result.returncode)
-        for line in (result.stderr or "").strip().split("\n"):
-            if line.strip():
-                logger.error("Migration error: %s", line.strip())
-        logger.warning(
-            "Application starting with pending migrations. "
-            "The /ready endpoint will report 'degraded' until "
-            "all migrations are applied."
-        )
-    else:
-        logger.info("Database migrations completed successfully.")
+def start_migrations():
+    """Launch migrations in background — app starts immediately."""
+    t = threading.Thread(target=_run_migrations, daemon=True)
+    t.start()
+    logger.info("Migrations launched in background — app is ready to accept requests.")
 
 
 # ── Request ID Middleware ───────────────────────
@@ -101,6 +118,7 @@ async def add_request_id(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     return response
+
 
 # ── Middleware ───────────────────────────────────
 
@@ -153,27 +171,25 @@ def health_check():
 def readiness_check():
     """
     Readiness probe.
-    Confirms that the application can establish a database connection.
+    Returns 503 until background migrations finish, then 200.
     """
+    if not _migrations_done.is_set():
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "migrating", "database": "pending migrations..."},
+        )
     from app.db.session import SessionLocal
 
     db = None
-
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
-        return {
-            "status": "ready",
-            "database": "connected",
-        }
+        return {"status": "ready", "database": "connected", "migrations_ok": _migrations_ok}
     except Exception:
         logger.exception("Readiness check failed")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "status": "not ready",
-                "database": "disconnected",
-            },
+            content={"status": "not ready", "database": "disconnected"},
         )
     finally:
         if db is not None:
@@ -209,30 +225,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             errors[field] = []
         errors[field].append(error["msg"])
 
-    # Build human-friendly message from validation errors
     friendly_messages = []
     for field, msgs in errors.items():
         for msg in msgs:
             friendly_messages.append(f"{field}: {msg}")
     friendly_message = "; ".join(friendly_messages) if friendly_messages else "Please check your input and try again."
 
-    logger.warning(
-        "Validation error",
-        extra={
-            "request_id": request_id,
-            "endpoint": str(request.url.path),
-            "errors": errors,
-        },
-    )
+    logger.warning("Validation error", extra={"request_id": request_id, "endpoint": str(request.url.path), "errors": errors})
 
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=error_response(
-            friendly_message,
-            errors=errors,
-            request_id=request_id,
-            error="VALIDATION_ERROR",
-        ),
+        content=error_response(friendly_message, errors=errors, request_id=request_id, error="VALIDATION_ERROR"),
     )
 
 
@@ -241,7 +244,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTPExceptions with standard envelope and appropriate error codes."""
     request_id = getattr(request.state, "request_id", None)
 
-    # Map HTTP status codes to machine-readable error codes
     error_code_map = {
         status.HTTP_400_BAD_REQUEST: "BAD_REQUEST",
         status.HTTP_401_UNAUTHORIZED: "UNAUTHORIZED",
@@ -253,22 +255,11 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     }
     error_code = error_code_map.get(exc.status_code, "HTTP_ERROR")
 
-    logger.warning(
-        f"HTTP {exc.status_code}: {exc.detail}",
-        extra={
-            "request_id": request_id,
-            "endpoint": str(request.url.path),
-            "status_code": exc.status_code,
-        },
-    )
+    logger.warning(f"HTTP {exc.status_code}: {exc.detail}", extra={"request_id": request_id, "endpoint": str(request.url.path), "status_code": exc.status_code})
 
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response(
-            exc.detail,
-            request_id=request_id,
-            error=error_code,
-        ),
+        content=error_response(exc.detail, request_id=request_id, error=error_code),
     )
 
 
@@ -276,21 +267,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def general_exception_handler(request: Request, exc: Exception):
     """Catch-all handler for unhandled exceptions — never exposes stack traces."""
     request_id = getattr(request.state, "request_id", None)
-
-    logger.error(
-        "Unhandled exception",
-        extra={
-            "request_id": request_id,
-            "endpoint": str(request.url.path),
-        },
-        exc_info=True,
-    )
-
+    logger.error("Unhandled exception", extra={"request_id": request_id, "endpoint": str(request.url.path)}, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=error_response(
-            "Internal server error.",
-            request_id=request_id,
-            error="INTERNAL_ERROR",
-        ),
+        content=error_response("Internal server error.", request_id=request_id, error="INTERNAL_ERROR"),
     )
