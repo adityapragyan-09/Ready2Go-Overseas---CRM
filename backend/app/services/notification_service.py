@@ -94,6 +94,10 @@ def get_latest_notifications(
 
     query = db.query(Notification).filter(filter_cond)
 
+    # Employee role-based filtering: non-admins cannot see employee or authentication modules
+    if not is_admin:
+        query = query.filter(Notification.module.notin_(["employee", "authentication"]))
+
     if module_filter:
         module_map = {
             "applicant": "applicant",
@@ -143,11 +147,13 @@ def get_unread_count(db: Session, user_id: int, is_admin: bool) -> int:
     else:
         filter_cond = Notification.recipient_user_id == user_id
 
-    return (
-        db.query(Notification)
-        .filter(and_(filter_cond, Notification.is_read == False))
-        .count()
-    )
+    query = db.query(Notification).filter(and_(filter_cond, Notification.is_read == False))
+
+    # Apply role-based module filtering for non-admins
+    if not is_admin:
+        query = query.filter(Notification.module.notin_(["employee", "authentication"]))
+
+    return query.count()
 
 
 def mark_read(db: Session, notification_id: int, user_id: int, is_admin: bool) -> Notification:

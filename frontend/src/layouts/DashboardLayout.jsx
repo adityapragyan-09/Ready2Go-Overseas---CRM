@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useNotifications } from '../context/NotificationContext';
 import Logo from '../assets/logo/Logo';
 import {
   LayoutDashboard,
@@ -25,11 +26,11 @@ import api from '../config/api';
 
 const DashboardLayout = () => {
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [sidebarCounts, setSidebarCounts] = useState({});
   const dropdownRef = useRef(null);
 
@@ -50,16 +51,14 @@ const DashboardLayout = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch sidebar badges with polling
+  // Fetch sidebar badges with polling — unreadCount comes from context
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [notifRes, leadRes, pendingRes] = await Promise.all([
-          api.get('/notifications/unread-count'),
+        const [leadRes, pendingRes] = await Promise.all([
           api.get('/applicants').catch(() => ({ data: { success: false } })),
           api.get('/assignment-requests?status=PENDING').catch(() => ({ data: { success: false } })),
         ]);
-        if (notifRes.data?.success) setUnreadCount(notifRes.data.data.unread_count || 0);
         const counts = {};
         if (leadRes.data?.success) counts.leads = leadRes.data.data.total || 0;
         if (pendingRes.data?.success) counts.pendingRequests = pendingRes.data.data.total || 0;
@@ -67,7 +66,7 @@ const DashboardLayout = () => {
       } catch { /* silent */ }
     };
     fetchCounts();
-    const interval = setInterval(fetchCounts, 30000);
+    const interval = setInterval(fetchCounts, 60000);
     return () => clearInterval(interval);
   }, []);
 

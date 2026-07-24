@@ -29,7 +29,7 @@ import toast from 'react-hot-toast';
 export const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { notifications, fetchNotifications, markAsRead } = useNotifications();
+  const { notifications, fetchNotifications, markAsRead, unreadCount } = useNotifications();
   
   // Dashboard states
   const [summary, setSummary] = useState(null);
@@ -49,7 +49,6 @@ export const Dashboard = () => {
   const [isLoadingAdvisor, setIsLoadingAdvisor] = useState(false);
   const [myLeads, setMyLeads] = useState([]);
   const [myLeadsLoading, setMyLeadsLoading] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
 
   const loadAdvisorApplicants = async (employeeId, name) => {
     if (!employeeId) return;
@@ -84,14 +83,12 @@ export const Dashboard = () => {
       setRecent(recentData);
 
       if (isAdmin) {
-        const [empData, sysData, notifCount] = await Promise.all([
+        const [empData, sysData] = await Promise.all([
           dashboardService.getEmployees(),
           dashboardService.getSystem(),
-          api.get('/notifications/unread-count').catch(() => ({ data: { success: false } })),
         ]);
         setEmployees(empData);
         setSystem(sysData);
-        if (notifCount?.data?.success) setUnreadCount(notifCount.data.data.unread_count || 0);
       } else {
         // Counselors see their own employee item in workload
         const selfData = await dashboardService.getEmployees();
