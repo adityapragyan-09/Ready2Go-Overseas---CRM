@@ -97,7 +97,40 @@ def create_document(
     # 6. Upload to Supabase Storage
     # Falls back to application/octet-stream if mime_type is missing
     mime_type = file.content_type or "application/octet-stream"
-    upload_file(file.file, storage_path, mime_type)
+    storage_path_from_storage = upload_file(file.file, storage_path, mime_type)
+
+    # If Supabase returned a different path (e.g., normalized), use that instead
+    if storage_path_from_storage and storage_path_from_storage != storage_path:
+        logger.warning(
+            "STORAGE PATH CORRECTED: '%s' → '%s' (from Supabase response Key)",
+            storage_path, storage_path_from_storage,
+        )
+        stored_file_name = Path(storage_path_from_storage).name
+        storage_path = storage_path_from_storage
+    else:
+        stored_file_name = unique_stored_name
+
+    # Verify the file exists in Supabase Storage (best-effort)
+    try:
+        from app.services.storage_service import list_storage_objects
+        parent = "/".join(storage_path.split("/")[:-1])
+        objects = list_storage_objects(prefix=parent, limit=50)
+        names = [o.get("name", "") for o in objects]
+        uploaded_file_name = storage_path.split("/")[-1]
+        if uploaded_file_name not in names:
+            logger.error(
+                "UPLOAD VERIFICATION FAILED: file '%s' not found in bucket '%s' "
+                "under prefix '%s'. Found objects: %s. Storage path in DB: %s",
+                uploaded_file_name, settings.SUPABASE_BUCKET, parent,
+                names, storage_path,
+            )
+        else:
+            logger.info(
+                "UPLOAD VERIFICATION OK: '%s' found at '%s' in bucket '%s'",
+                uploaded_file_name, parent, settings.SUPABASE_BUCKET,
+            )
+    except Exception as exc:
+        logger.warning("Upload verification skipped (non-fatal): %s", exc)
 
     # 7. Save to Database
     doc_code = _generate_document_code(db)
@@ -106,7 +139,7 @@ def create_document(
         applicant_id=applicant_id,
         document_type=document_type,
         original_file_name=original_name,
-        stored_file_name=unique_stored_name,
+        stored_file_name=stored_file_name,
         storage_path=storage_path,
         mime_type=mime_type,
         file_extension=ext.lstrip("."),

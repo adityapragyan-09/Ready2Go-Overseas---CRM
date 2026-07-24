@@ -50,51 +50,93 @@ def upload_file(file_data, storage_path: str, mime_type: str) -> str:
 
     Stores the object at `{bucket}/{storage_path}`. The storage_path is
     stored verbatim in the DB and later used for signed URL generation.
+
+    Returns the full storage path (e.g. ``applicants/APP-000001/uuid.pdf``)
+    that the caller should persist in the database.
+
+    Raises HTTPException 502 if the upload fails or the response cannot
+    be validated.
     """
     storage_path = storage_path.strip()
 
+    # ── Local dev fallback ──────────────────────────────
     if settings.ENVIRONMENT != "production" and (
-        not settings.SUPABASE_URL or not settings.SUPABASE_KEY or "dummy" in settings.SUPABASE_URL or "dummy" in settings.SUPABASE_KEY
+        not settings.SUPABASE_URL or not settings.SUPABASE_KEY
+        or "dummy" in settings.SUPABASE_URL or "dummy" in settings.SUPABASE_KEY
     ):
         local_path = _safe_local_path(storage_path)
         local_path.parent.mkdir(parents=True, exist_ok=True)
         with open(local_path, "wb") as f:
             content = file_data.read() if hasattr(file_data, "read") else file_data
             f.write(content)
-        return f"/uploads/{storage_path}"
+        logger.info("LOCAL UPLOAD (dev): path=%s", storage_path)
+        return storage_path
 
+    # ── Supabase upload ─────────────────────────────────
     url = f"{settings.SUPABASE_URL}/storage/v1/object/{settings.SUPABASE_BUCKET}/{storage_path}"
     headers = _get_headers(mime_type)
+    safe_url = url.replace(settings.SUPABASE_KEY, "***") if settings.SUPABASE_KEY else url
 
-    logger.info(
-        "UPLOAD: bucket=%s path=%s url=%s",
-        settings.SUPABASE_BUCKET, storage_path,
-        url.replace(settings.SUPABASE_KEY, "***") if settings.SUPABASE_KEY else url,
-    )
+    logger.info("=== UPLOAD REQUEST ===")
+    logger.info("  bucket=%s", settings.SUPABASE_BUCKET)
+    logger.info("  storage_path=%s", storage_path)
+    logger.info("  mime_type=%s", mime_type)
+    logger.info("  url=%s", safe_url)
+    logger.info("  content-type=%s", mime_type)
 
     try:
-        response = requests.post(url, data=file_data, headers=headers, timeout=settings.UPLOAD_TIMEOUT_SECONDS)
-        logger.info(
-            "UPLOAD RESPONSE: status=%s body=%s",
-            response.status_code, response.text[:500] if response.text else "(empty)",
+        response = requests.post(
+            url,
+            data=file_data,
+            headers=headers,
+            timeout=settings.UPLOAD_TIMEOUT_SECONDS,
         )
 
+        logger.info("=== UPLOAD RESPONSE ===")
+        logger.info("  status=%s", response.status_code)
+        logger.info("  body=%.2000s", response.text or "(empty)")
+
+        # Supabase Storage returns 200 OK for a successful upload.
+        # Any other status code is a failure.
         if response.status_code != 200:
             if response.status_code in (401, 403):
-                raise HTTPException(status_code=502, detail="Storage authentication failed.")
-            raise HTTPException(status_code=502, detail="File upload to storage failed.")
+                raise HTTPException(
+                    status_code=502,
+                    detail="Storage authentication failed.",
+                )
+            raise HTTPException(
+                status_code=502,
+                detail=f"File upload to storage failed (HTTP {response.status_code}).",
+            )
 
+        # Validate the response body and returned Key
+        returned_key = None
         try:
             resp_data = response.json()
             returned_key = resp_data.get("Key")
-            logger.info("UPLOAD KEY: returned=%s expected=%s", returned_key, storage_path)
+            logger.info("  returned_Key=%s", returned_key)
         except Exception:
-            pass
+            logger.warning("  could not parse response as JSON")
 
-        return f"{settings.SUPABASE_URL}/storage/v1/object/public/{settings.SUPABASE_BUCKET}/{storage_path}"
+        if returned_key is not None and returned_key != storage_path:
+            logger.warning(
+                "UPLOAD PATH MISMATCH: returned Key='%s' != expected path='%s'. "
+                "Using returned Key as the canonical path.",
+                returned_key, storage_path,
+            )
+            # Use the returned Key — it is the actual path in storage
+            storage_path = returned_key
+
+        logger.info("  final_storage_path=%s", storage_path)
+        return storage_path
     except requests.RequestException as e:
-        logger.exception("Storage upload network error for path %s", storage_path)
-        raise HTTPException(status_code=502, detail="Storage service is currently unavailable.")
+        logger.exception(
+            "Storage upload NETWORK ERROR for path %s", storage_path,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Storage service is currently unavailable.",
+        )
 
 
 def delete_file(storage_path: str) -> None:
@@ -330,14 +372,16 @@ def diagnose_storage_path(storage_path: str) -> dict:
     Never raises — returns a dict with all findings.
     """
     storage_path = storage_path.strip()
+    supabase_origin = settings.SUPABASE_URL
     result = {
         "db_storage_path": storage_path,
+        "db_storage_path_chars": [c for c in storage_path],
         "bucket": settings.SUPABASE_BUCKET,
-        "supabase_url": settings.SUPABASE_URL.replace(settings.SUPABASE_KEY, "***") if settings.SUPABASE_KEY else settings.SUPABASE_URL,
+        "supabase_url": supabase_origin.replace(settings.SUPABASE_KEY, "***") if settings.SUPABASE_KEY else supabase_origin,
         "errors": [],
     }
 
-    if not settings.SUPABASE_URL or "dummy" in settings.SUPABASE_URL:
+    if not supabase_origin or "dummy" in supabase_origin:
         result["error"] = "SUPABASE_URL not configured"
         return result
 
@@ -345,76 +389,117 @@ def diagnose_storage_path(storage_path: str) -> dict:
     path_parts = storage_path.split("/")
     result["filename"] = path_parts[-1] if path_parts else storage_path
     result["parent_dir"] = "/".join(path_parts[:-1]) if len(path_parts) > 1 else ""
+    result["path_depth"] = len(path_parts)
+    result["path_has_leading_slash"] = storage_path.startswith("/")
+    result["path_has_trailing_slash"] = storage_path.endswith("/")
+    result["path_has_bucket_prefix"] = storage_path.startswith(settings.SUPABASE_BUCKET)
 
-    # 1. Ping the bucket
+    # ── 1. List root of bucket ────────────────────────
     try:
-        root_items = list_storage_objects(prefix="", limit=1)
+        root_items = list_storage_objects(prefix="", limit=100)
         result["bucket_reachable"] = True
-        result["has_applicants_folder"] = any(
-            item.get("name") == "applicants" for item in root_items
+        root_names = [item.get("name", "") for item in root_items]
+        result["all_root_objects"] = root_names
+        # Check if the first path segment exists
+        first_segment = path_parts[0] if path_parts else ""
+        result["first_segment"] = first_segment
+        result["first_segment_exists"] = (
+            first_segment in root_names
+            or any(n.startswith(first_segment) for n in root_names)
         )
     except Exception as e:
         result["bucket_reachable"] = False
         result["errors"].append(f"Bucket ping failed: {e}")
-        result["has_applicants_folder"] = "unknown"
 
-    # 2. List applicant directory to find all APP- folders
-    try:
-        applicant_items = list_storage_objects(prefix="applicants", limit=100)
-        app_folders = [item.get("name", "") for item in applicant_items]
-        result["applicant_folders_in_storage"] = app_folders
+    # ── 2. Walk down each path segment ─────────────────
+    current_prefix = ""
+    result["path_segment_verification"] = []
+    for i, segment in enumerate(path_parts):
+        prefix_before = current_prefix
+        current_prefix = f"{current_prefix}{segment}/"
+        try:
+            items = list_storage_objects(prefix=prefix_before, limit=200)
+            item_names = [item.get("name", "") for item in items]
+            # Supabase list returns basenames under the prefix
+            result["path_segment_verification"].append({
+                "prefix": current_prefix,
+                "items_found": item_names,
+                "segment": segment,
+                "segment_matches": segment in item_names or any(
+                    n == segment for n in item_names
+                ),
+            })
+        except Exception as e:
+            result["path_segment_verification"].append({
+                "prefix": current_prefix,
+                "error": str(e),
+            })
 
-        # Check if our specific APP folder exists
-        app_folder = path_parts[0] + "/" + path_parts[1] if len(path_parts) >= 2 else ""
-        result["app_folder_in_list"] = app_folder in app_folders
-        result["expected_app_folder"] = app_folder
-    except Exception as e:
-        result["errors"].append(f"Applicant folder list failed: {e}")
-
-    # 3. List objects in the specific APP- folder
+    # ── 3. List objects in the specific folder ─────────
     parent_dir = result["parent_dir"]
     if parent_dir:
         try:
-            dir_items = list_storage_objects(prefix=parent_dir, limit=100)
-            result["objects_in_folder"] = [item.get("name", "") for item in dir_items]
-            result["file_exists_in_storage"] = result["filename"] in result["objects_in_folder"]
+            dir_items = list_storage_objects(prefix=parent_dir, limit=200)
+            raw_names = [item.get("name", "") for item in dir_items]
+            result["objects_in_folder_raw"] = raw_names
+            result["file_exists_in_storage"] = result["filename"] in raw_names
 
-            # Compare full paths (some APIs return full path, some return basename)
-            full_paths = [
-                f"{parent_dir}/{item.get('name', '')}" if not item.get("name", "").startswith(parent_dir) else item.get("name", "")
-                for item in dir_items
-            ]
+            # Build full paths
+            full_paths = []
+            for item in dir_items:
+                raw_name = item.get("name", "")
+                if raw_name.startswith(parent_dir):
+                    full_paths.append(raw_name)
+                else:
+                    full_paths.append(f"{parent_dir}/{raw_name}")
             result["full_paths_in_folder"] = full_paths
-            result["full_path_matches_db"] = storage_path in full_paths
+            result["db_path_in_full_paths"] = storage_path in full_paths
+
+            # Character-by-character comparison
+            matching_full_path = next((p for p in full_paths if p == storage_path), None)
+            result["exact_full_path_match"] = matching_full_path is not None
+            if not matching_full_path and full_paths:
+                # Show the closest match
+                closest = min(full_paths, key=lambda p: abs(len(p) - len(storage_path)))
+                result["closest_storage_path"] = closest
+                result["closest_path_chars"] = [c for c in closest]
+                # Character diff
+                diff = []
+                for i, (a, b) in enumerate(zip(storage_path, closest)):
+                    if a != b:
+                        diff.append({"pos": i, "expected": a, "actual": b})
+                if len(storage_path) != len(closest):
+                    diff.append({
+                        "pos": min(len(storage_path), len(closest)),
+                        "expected": storage_path[len(closest):] if len(storage_path) > len(closest) else "(end)",
+                        "actual": closest[len(storage_path):] if len(closest) > len(storage_path) else "(end)",
+                    })
+                result["path_diffs"] = diff
+                result["storage_path_len"] = len(storage_path)
+                result["closest_path_len"] = len(closest)
         except Exception as e:
             result["errors"].append(f"File list failed: {e}")
 
-    # 4. Try to generate a signed URL
+    # ── 4. Try to generate and verify a signed URL ─────
     try:
         signed_url = generate_signed_url(storage_path, expires_in=120)
         result["signed_url_generated"] = True
         result["signed_url_full"] = signed_url
 
-        # Verify the signed URL by making a HEAD request
         try:
             head_resp = requests.head(signed_url, timeout=10)
             result["signed_url_head_status"] = head_resp.status_code
             result["signed_url_head_headers"] = dict(head_resp.headers)
 
-            # If HEAD fails, try GET with range (just first byte)
             if head_resp.status_code != 200:
                 get_resp = requests.get(signed_url, headers={"Range": "bytes=0-0"}, timeout=10)
                 result["signed_url_get_range_status"] = get_resp.status_code
-                result["signed_url_get_range_body"] = get_resp.text[:200]
+                result["signed_url_get_range_body"] = get_resp.text[:500]
+                result["signed_url_get_range_headers"] = dict(get_resp.headers)
         except requests.RequestException as e:
             result["signed_url_verify_error"] = str(e)
     except Exception as e:
         result["signed_url_generated"] = False
         result["signed_url_error"] = str(e)
-
-    # 5. Check for common path issues
-    result["path_has_leading_slash"] = storage_path.startswith("/")
-    result["path_has_trailing_slash"] = storage_path.endswith("/")
-    result["path_has_bucket_prefix"] = storage_path.startswith(settings.SUPABASE_BUCKET)
 
     return result

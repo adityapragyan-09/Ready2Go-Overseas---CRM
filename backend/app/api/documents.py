@@ -14,6 +14,7 @@ Endpoints:
 """
 
 import io
+import logging
 import zipfile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -34,6 +35,8 @@ from app.services.document_service import (
 )
 from app.services.storage_service import download_file_as_bytes, generate_signed_url
 from app.utils.response import success_response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -65,7 +68,15 @@ async def upload_document_route(
         document_type=document_type,
         uploaded_by=current_user.id,
     )
-    
+
+    logger.info(
+        "DOCUMENT UPLOADED: id=%s code=%s original='%s' stored='%s' "
+        "storage_path='%s' mime=%s size=%s",
+        document.id, document.document_code, document.original_file_name,
+        document.stored_file_name, document.storage_path,
+        document.mime_type, document.file_size,
+    )
+
     document_data = DocumentResponse.model_validate(document).model_dump(by_alias=True)
     return success_response(
         message="Document uploaded successfully.",
@@ -107,16 +118,25 @@ def download_document_route(
     """
     Generate a secure, temporary signed download URL for a document.
     """
+    from app.models.document import Document
+    doc = db.query(Document).filter(Document.id == document_id).first()
+
     signed_url = generate_document_download(db, document_id)
     # Fetch document metadata for response body
     document = get_document_by_id(db, document_id)
+
+    logger.info(
+        "DOCUMENT DOWNLOAD: id=%s doc_code=%s storage_path='%s' signed_url_len=%s",
+        document_id, document.document_code, document.storage_path,
+        len(signed_url) if signed_url else 0,
+    )
 
     download_data = DocumentDownloadResponse(
         document_code=document.document_code,
         original_file_name=document.original_file_name,
         download_url=signed_url,
     ).model_dump()
-    
+
     return success_response(
         message="Document download URL generated successfully.",
         data=download_data,
@@ -134,17 +154,29 @@ def view_document_route(
     """
     Generate a secure, temporary signed view URL for a document.
     """
+    from app.models.document import Document
+    doc = db.query(Document).filter(Document.id == document_id).first()
+
     signed_url = generate_document_download(db, document_id)
     # Fetch document metadata for response body
     from app.services.document_service import get_document_by_id
     document = get_document_by_id(db, document_id)
-    
+
+    logger.info(
+        "DOCUMENT VIEW: id=%s doc_code=%s original_name='%s' "
+        "storage_path='%s' mime_type=%s signed_url_len=%s signed_url_start=%.120s",
+        document_id, document.document_code, document.original_file_name,
+        document.storage_path, document.mime_type,
+        len(signed_url) if signed_url else 0,
+        signed_url or "(none)",
+    )
+
     view_data = DocumentViewResponse(
         document_code=document.document_code,
         original_file_name=document.original_file_name,
         view_url=signed_url,
     ).model_dump()
-    
+
     return success_response(
         message="Document view URL generated successfully.",
         data=view_data,
