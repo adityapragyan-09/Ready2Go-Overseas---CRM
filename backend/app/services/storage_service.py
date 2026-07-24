@@ -57,6 +57,7 @@ def upload_file(file_data, storage_path: str, mime_type: str) -> str:
             f.write(content)
         return f"/uploads/{storage_path}"
 
+    # Supabase Storage v1 upload: POST /object/{bucket_id}/{path}
     url = f"{settings.SUPABASE_URL}/storage/v1/object/{settings.SUPABASE_BUCKET}/{storage_path}"
     headers = _get_headers(mime_type)
 
@@ -141,12 +142,18 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
         _safe_local_path(storage_path)
         return f"http://localhost:8000/uploads/{storage_path}"
 
-    url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{settings.SUPABASE_BUCKET}/{storage_path}"
+    # Supabase Storage v1: POST /object/sign/{bucket_id} with path in body
+    url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{settings.SUPABASE_BUCKET}"
     headers = _get_headers()
     headers["Content-Type"] = "application/json"
 
     try:
-        response = requests.post(url, json={"expiresIn": expires_in}, headers=headers, timeout=60)
+        response = requests.post(
+            url,
+            json={"path": storage_path, "expiresIn": expires_in},
+            headers=headers,
+            timeout=60,
+        )
         if response.status_code != 200:
             logger.error(
                 "Supabase signed URL failed [status=%s path=%s] response=%s",

@@ -56,18 +56,25 @@ const DashboardLayout = () => {
     const fetchCounts = async () => {
       try {
         const [leadRes, pendingRes] = await Promise.all([
-          api.get('/applicants').catch(() => ({ data: { success: false } })),
+          api.get('/lead-inquiries?page_size=1').catch(() => ({ data: { success: false } })),
           api.get('/assignment-requests?status=PENDING').catch(() => ({ data: { success: false } })),
         ]);
         const counts = {};
+        // Lead Inquiries badge: use total count from lead-inquiries endpoint
         if (leadRes.data?.success) counts.leads = leadRes.data.data.total || 0;
         if (pendingRes.data?.success) counts.pendingRequests = pendingRes.data.data.total || 0;
         setSidebarCounts(counts);
       } catch { /* silent */ }
     };
     fetchCounts();
+    // Also listen for custom notification-update events to refresh counts
+    const handleUpdate = () => fetchCounts();
+    window.addEventListener('notification-update', handleUpdate);
     const interval = setInterval(fetchCounts, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notification-update', handleUpdate);
+    };
   }, []);
 
   const navItems = [

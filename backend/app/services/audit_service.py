@@ -4,6 +4,9 @@ Ready2Go CRM — Audit Log Service
 Provides create_audit_entry() for recording enterprise actions and
 query_audit_logs() for the Audit Center with full filtering.
 
+Also includes login/logout events from the legacy activity_logs table
+so the Audit Center shows data immediately.
+
 Usage:
     from app.services.audit_service import create_audit_entry
 
@@ -24,11 +27,12 @@ Usage:
 import csv
 import io
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.models.activity_log import ActivityLog
 from app.models.audit_log import AuditLog
 from app.models.user import User
 
@@ -83,6 +87,35 @@ def create_audit_entry(
     return entry
 
 
+def _activity_log_to_dict(log: ActivityLog, user_name: str | None, user_code: str | None) -> dict:
+    """Convert a legacy ActivityLog (login/logout) to the unified audit format."""
+    action_parts = []
+    if log.login_time:
+        action_parts.append("Login")
+    if log.logout_time:
+        action_parts.append("Logout")
+    action = " / ".join(action_parts) if action_parts else "Session Activity"
+
+    return {
+        "id": log.id,
+        "category": "security",
+        "severity": "INFO",
+        "action": action,
+        "description": f"User {user_name or '#' + str(log.user_id or 0)} logged in" if log.login_time else None,
+        "performed_by_id": log.user_id,
+        "performed_by_name": user_name,
+        "target_type": None,
+        "target_id": None,
+        "target_name": None,
+        "metadata": None,
+        "old_value": None,
+        "new_value": None,
+        "ip_address": log.ip_address,
+        "request_id": None,
+        "created_at": log.login_time or log.logout_time,
+    }
+
+
 def query_audit_logs(
     db: Session,
     *,
@@ -99,8 +132,17 @@ def query_audit_logs(
 ) -> tuple[int, list[AuditLog]]:
     """Query audit logs with optional filters and pagination.
 
+    When no category filter is applied, also includes legacy login/logout
+    events from the activity_logs table so the Audit Center shows data
+    immediately without waiting for enterprise audit events.
+
     Returns (total_count, items).
     """
+    # When category is not specified, include legacy login/logout data
+    if category is None:
+        return _query_all_events(db, severity, employee_id, date_from, date_to,
+                                  target_type, target_id, search, page, page_size)
+
     query = db.query(AuditLog)
 
     # 1. Category filter
@@ -135,7 +177,7 @@ def query_audit_logs(
     if target_id is not None:
         query = query.filter(AuditLog.target_id == target_id)
 
-    # 6. Text search (matches action, description, target_name, performed_by_name)
+    # 6. Text search
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -147,10 +189,7 @@ def query_audit_logs(
             )
         )
 
-    # Count total before pagination
     total = query.count()
-
-    # Pagination
     offset = (page - 1) * page_size
     items = (
         query.order_by(AuditLog.created_at.desc())
@@ -160,6 +199,115 @@ def query_audit_logs(
     )
 
     return total, items
+
+
+def _query_all_events(
+    db: Session,
+    severity: str | None = None,
+    employee_id: int | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    target_type: str | None = None,
+    target_id: int | None = None,
+    search: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[int, list]:
+    """Query both audit_logs and legacy activity_logs, combine, sort, paginate."""
+    # 1. Query audit_logs
+    audit_q = db.query(AuditLog)
+    if employee_id is not None:
+        audit_q = audit_q.filter(AuditLog.performed_by_id == employee_id)
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            audit_q = audit_q.filter(AuditLog.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            audit_q = audit_q.filter(AuditLog.created_at <= dt_to)
+        except ValueError:
+            pass
+
+    audit_items = audit_q.order_by(AuditLog.created_at.desc()).all()
+
+    # 2. Query legacy activity_logs (login/logout)
+    act_q = db.query(ActivityLog, User.name, User.employee_code).outerjoin(
+        User, ActivityLog.user_id == User.id
+    )
+    if employee_id is not None:
+        act_q = act_q.filter(ActivityLog.user_id == employee_id)
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            act_q = act_q.filter(ActivityLog.login_time >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            act_q = act_q.filter(ActivityLog.login_time <= dt_to)
+        except ValueError:
+            pass
+
+    act_rows = act_q.order_by(ActivityLog.login_time.desc()).all()
+
+    # 3. Convert activity logs to unified format
+    act_dicts = []
+    for log, user_name, user_code in act_rows:
+        d = _activity_log_to_dict(log, user_name, user_code)
+        # Mark as from activity_logs for dedup
+        d["_source"] = "activity_log"
+        act_dicts.append(d)
+
+    # 4. Convert audit logs to dicts
+    audit_dicts = []
+    for a in audit_items:
+        d = {
+            "id": a.id,
+            "category": a.category,
+            "severity": a.severity,
+            "action": a.action,
+            "description": a.description,
+            "performed_by_id": a.performed_by_id,
+            "performed_by_name": a.performed_by_name,
+            "target_type": a.target_type,
+            "target_id": a.target_id,
+            "target_name": a.target_name,
+            "metadata": a.metadata_,
+            "old_value": a.old_value,
+            "new_value": a.new_value,
+            "ip_address": a.ip_address,
+            "request_id": a.request_id,
+            "created_at": a.created_at,
+            "_source": "audit_log",
+        }
+        audit_dicts.append(d)
+
+    # 5. Combine and sort by created_at descending
+    combined = audit_dicts + act_dicts
+    MIN_DT = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    combined.sort(key=lambda x: x["created_at"] or MIN_DT, reverse=True)
+
+    # 6. Apply text search on combined results
+    if search:
+        search_term = search.lower()
+        combined = [
+            e for e in combined
+            if search_term in (e.get("action") or "").lower()
+            or search_term in (e.get("description") or "").lower()
+            or search_term in (e.get("target_name") or "").lower()
+            or search_term in (e.get("performed_by_name") or "").lower()
+        ]
+
+    # 7. Paginate
+    total = len(combined)
+    offset = (page - 1) * page_size
+    paged = combined[offset:offset + page_size]
+
+    return total, paged
 
 
 def export_audit_logs_csv(
@@ -198,18 +346,34 @@ def export_audit_logs_csv(
     ])
 
     for entry in items:
-        writer.writerow([
-            entry.created_at.isoformat() if entry.created_at else "",
-            entry.category,
-            entry.severity,
-            entry.action,
-            entry.description or "",
-            entry.performed_by_name or "",
-            entry.target_type or "",
-            entry.target_name or "",
-            entry.old_value or "",
-            entry.new_value or "",
-            entry.ip_address or "",
-        ])
+        # Handle both AuditLog objects and dicts (from combined query)
+        if isinstance(entry, dict):
+            writer.writerow([
+                entry.get("created_at", "").isoformat() if hasattr(entry.get("created_at"), "isoformat") else str(entry.get("created_at", "")),
+                entry.get("category", ""),
+                entry.get("severity", ""),
+                entry.get("action", ""),
+                entry.get("description", "") or "",
+                entry.get("performed_by_name", "") or "",
+                entry.get("target_type", "") or "",
+                entry.get("target_name", "") or "",
+                entry.get("old_value", "") or "",
+                entry.get("new_value", "") or "",
+                entry.get("ip_address", "") or "",
+            ])
+        else:
+            writer.writerow([
+                entry.created_at.isoformat() if entry.created_at else "",
+                entry.category,
+                entry.severity,
+                entry.action,
+                entry.description or "",
+                entry.performed_by_name or "",
+                entry.target_type or "",
+                entry.target_name or "",
+                entry.old_value or "",
+                entry.new_value or "",
+                entry.ip_address or "",
+            ])
 
     return output.getvalue()
