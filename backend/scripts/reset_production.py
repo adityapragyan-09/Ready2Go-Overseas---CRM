@@ -3,14 +3,22 @@
 Ready2Go CRM — Production Data Reset Script
 
 Resets the entire CRM for a fresh production deployment.
+Can also update admin credentials without resetting.
 
 Usage:
-    python -m scripts.reset_production
+    Full reset + update admin:
+        python -m scripts.reset_production --admin-email admin@example.com --admin-password MyStr0ng!Pass
 
-WARNING: This DELETES ALL production data except the admin account.
-Run only when preparing for a fresh client demonstration.
+    Update admin only (no reset):
+        python -m scripts.reset_production --update-admin-only --admin-email admin@example.com --admin-password MyStr0ng!Pass
+
+    Reset only (keep existing admin):
+        python -m scripts.reset_production
+
+WARNING: Reset DELETES ALL production data except the admin account.
 """
 
+import argparse
 import logging
 import os
 import sys
@@ -35,6 +43,7 @@ TABLES_TO_TRUNCATE = [
     "lead_activities",
     "lead_inquiries",
     "activity_logs",
+    "audit_logs",
     "applicants",
 ]
 
@@ -48,6 +57,7 @@ SEQUENCES_TO_RESET = [
     "lead_activities_id_seq",
     "lead_inquiries_id_seq",
     "activity_logs_id_seq",
+    "audit_logs_id_seq",
     "applicants_id_seq",
     "employees_id_seq",
     "users_id_seq",
@@ -61,21 +71,17 @@ def reset_production():
         logger.info("PRODUCTION DATA RESET")
         logger.info("=" * 60)
 
-        # ── Phase 1: Disable FK checks ────────────────────────────────
         if "sqlite" in settings.DATABASE_URL:
             db.execute(text("PRAGMA foreign_keys = OFF"))
         elif "postgresql" in settings.DATABASE_URL:
             db.execute(text("SET session_replication_role = 'replica'"))
         logger.info("Foreign key checks disabled")
 
-        # ── Phase 2: Delete documents from storage ────────────────────
-        # Documents must be deleted before applicants (FK)
-        from app.services.storage_service import delete_file, list_folder, _normalize
-
+        # Delete documents from storage
+        from app.services.storage_service import delete_file
         doc_rows = db.execute(
             text("SELECT id, storage_path FROM documents WHERE is_deleted = false")
         ).fetchall()
-
         deleted_from_storage = 0
         for row in doc_rows:
             try:
@@ -84,16 +90,15 @@ def reset_production():
                     deleted_from_storage += 1
             except Exception as e:
                 logger.warning("  Could not delete storage object %s: %s", row[1], e)
-
         logger.info("Deleted %d files from Supabase Storage", deleted_from_storage)
 
-        # ── Phase 3: Delete employees (except admin) ──────────────────
+        # Delete employees except admin
         emp_count = db.execute(
             text("DELETE FROM users WHERE role != 'admin'")
         ).rowcount
         logger.info("Deleted %d employee accounts", emp_count)
 
-        # ── Phase 4: Truncate all data tables ──────────────────────────
+        # Truncate all data tables
         for table in TABLES_TO_TRUNCATE:
             try:
                 if "sqlite" in settings.DATABASE_URL:
@@ -104,23 +109,21 @@ def reset_production():
             except Exception as e:
                 logger.warning("  Could not truncate %s: %s", table, e)
 
-        # ── Phase 5: Reset sequences (PostgreSQL) ─────────────────────
+        # Reset sequences (PostgreSQL)
         if "postgresql" in settings.DATABASE_URL:
             for seq in SEQUENCES_TO_RESET:
                 try:
                     db.execute(text(f"ALTER SEQUENCE {seq} RESTART WITH 1"))
                     logger.info("  Reset sequence: %s", seq)
                 except Exception:
-                    pass  # Some sequences may not exist on this schema
+                    pass
 
-        # ── Phase 6: Re-enable FK checks ───────────────────────────────
         if "sqlite" in settings.DATABASE_URL:
             db.execute(text("PRAGMA foreign_keys = ON"))
         elif "postgresql" in settings.DATABASE_URL:
             db.execute(text("SET session_replication_role = 'origin'"))
         logger.info("Foreign key checks re-enabled")
 
-        # ── Commit ────────────────────────────────────────────────────
         db.commit()
         logger.info("=" * 60)
         logger.info("RESET COMPLETE")
@@ -138,8 +141,72 @@ def reset_production():
         db.close()
 
 
+def update_admin(email: str = None, password: str = None):
+    """Update admin account credentials. Uses the app's password hashing."""
+    from app.core.security import hash_password
+
+    db = SessionLocal()
+    try:
+        admin = db.execute(
+            text("SELECT id, email, name FROM users WHERE role = 'admin' LIMIT 1")
+        ).first()
+        if not admin:
+            logger.error("No admin account found!")
+            return False
+
+        admin_id, current_email, admin_name = admin
+        updates = []
+
+        if email:
+            db.execute(
+                text("UPDATE users SET email = :email WHERE id = :id"),
+                {"email": email.strip().lower(), "id": admin_id},
+            )
+            updates.append(f"email → {email}")
+
+        if password:
+            pw_hash = hash_password(password)
+            db.execute(
+                text("UPDATE users SET password_hash = :hash WHERE id = :id"),
+                {"hash": pw_hash, "id": admin_id},
+            )
+            updates.append("password → [updated]")
+
+        if not updates:
+            logger.info("No credential changes requested.")
+            return True
+
+        db.commit()
+        logger.info("=" * 60)
+        logger.info("ADMIN CREDENTIALS UPDATED")
+        logger.info("  Admin ID:    %d", admin_id)
+        logger.info("  Admin name:  %s", admin_name)
+        logger.info("  Admin email: %s", email or current_email)
+        for u in updates:
+            logger.info("  Updated:     %s", u)
+        logger.info("=" * 60)
+
+        # Verify the password hash was stored correctly
+        if password:
+            verify = db.execute(
+                text("SELECT password_hash FROM users WHERE id = :id"),
+                {"id": admin_id},
+            ).scalar()
+            if verify and verify.startswith("$2"):
+                logger.info("  Password hash verified (bcrypt)")
+            else:
+                logger.error("  Password hash verification FAILED!")
+
+        return True
+    except Exception as e:
+        db.rollback()
+        logger.exception("Failed to update admin: %s", e)
+        return False
+    finally:
+        db.close()
+
+
 def verify_reset():
-    """Verify the reset was successful."""
     db = SessionLocal()
     try:
         logger.info("")
@@ -169,7 +236,6 @@ def verify_reset():
             except Exception as e:
                 logger.warning("  ⚠️ %s: could not check — %s", name, e)
 
-        # Verify admin exists
         admin_count = db.execute(
             text("SELECT COUNT(*) FROM users WHERE role = 'admin'")
         ).scalar() or 0
@@ -181,15 +247,31 @@ def verify_reset():
         else:
             logger.warning("")
             logger.warning("⚠️  Some checks failed — review the results above.")
-
     finally:
         db.close()
 
 
 if __name__ == "__main__":
-    confirm = input("This will DELETE ALL PRODUCTION DATA except admin. Continue? (yes/N): ")
-    if confirm.lower() == "yes":
-        reset_production()
-        verify_reset()
+    parser = argparse.ArgumentParser(description="Ready2Go CRM Production Reset")
+    parser.add_argument("--admin-email", help="New admin email address")
+    parser.add_argument("--admin-password", help="New admin password")
+    parser.add_argument("--update-admin-only", action="store_true", help="Only update admin credentials, skip reset")
+    args = parser.parse_args()
+
+    if args.update_admin_only:
+        update_admin(email=args.admin_email, password=args.admin_password)
+    elif args.admin_email or args.admin_password:
+        confirm = input("This will RESET ALL DATA and update admin credentials. Continue? (yes/N): ")
+        if confirm.lower() == "yes":
+            reset_production()
+            update_admin(email=args.admin_email, password=args.admin_password)
+            verify_reset()
+        else:
+            print("Cancelled.")
     else:
-        print("Cancelled.")
+        confirm = input("This will DELETE ALL PRODUCTION DATA except admin. Continue? (yes/N): ")
+        if confirm.lower() == "yes":
+            reset_production()
+            verify_reset()
+        else:
+            print("Cancelled.")
