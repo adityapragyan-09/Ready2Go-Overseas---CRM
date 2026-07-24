@@ -301,6 +301,30 @@ def assign_employee(db: Session, lead_id: int, employee_id: int, assigned_by: in
     return lead
 
 
+def mark_all_leads_read(db: Session) -> int:
+    """
+    Mark all NEW leads as CONTACTED (functionally 'read').
+    Returns the count of leads updated.
+    """
+    from app.constants.lead_inquiry import CONTACTED
+    count = (
+        db.query(LeadInquiry)
+        .filter(LeadInquiry.status == STATUS_NEW)
+        .update({"status": CONTACTED}, synchronize_session=False)
+    )
+    try:
+        db.commit()
+        logger.info("Marked %s leads as read (NEW -> CONTACTED)", count)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to mark leads as read")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to mark leads as read.",
+        )
+    return count
+
+
 def convert_to_applicant(db: Session, lead_id: int) -> dict:
     """
     Convert a lead to an applicant. (Stub — returns 501)

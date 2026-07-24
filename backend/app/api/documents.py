@@ -192,6 +192,32 @@ def download_all_documents_route(
     )
 
 
+# ── GET /{document_id}/diagnose — Storage Diagnostics ──
+
+@router.get("/{document_id}/diagnose")
+def diagnose_document_route(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Run storage diagnostics for a specific document.
+    Checks if the object exists in the bucket and verifies path integrity.
+    Admin-only diagnostic tool.
+    """
+    from app.services.storage_service import diagnose_storage_path
+    doc = get_document_by_id(db, document_id)
+    diagnosis = diagnose_storage_path(doc.storage_path)
+    diagnosis["document_id"] = doc.id
+    diagnosis["document_code"] = doc.document_code
+    diagnosis["stored_file_name"] = doc.stored_file_name
+    diagnosis["mime_type"] = doc.mime_type
+    return success_response(
+        message="Storage diagnostics completed.",
+        data=diagnosis,
+    )
+
+
 # ── DELETE /{document_id} ────────────────────────
 
 @router.delete("/{document_id}")

@@ -18,7 +18,7 @@ Endpoints:
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import LeadIdentity, get_current_user, resolve_lead_identity
+from app.core.dependencies import LeadIdentity, get_current_user, require_admin, resolve_lead_identity
 from app.core.enums import CallerType
 from app.db.session import get_db
 import logging
@@ -319,6 +319,25 @@ def convert_lead_route(
 ):
     """Convert a lead to an applicant. (Stub — returns 501)"""
     return service.convert_to_applicant(db, id)
+
+
+# ── PATCH /mark-all-read ──────────────────
+
+@router.patch("/mark-all-read")
+def mark_all_leads_read_route(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Mark all NEW leads as CONTACTED (functionally 'read').
+    Updates the sidebar badge — only new/unviewed leads are counted.
+    """
+    count = service.mark_all_leads_read(db)
+    # Dispatch notification-update event info in the response
+    return success_response(
+        message=f"{count} lead(s) marked as read.",
+        data={"marked_count": count},
+    )
 
 
 # ── GET /{id}/activities ──────────────────

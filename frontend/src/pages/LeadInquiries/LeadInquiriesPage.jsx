@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, RefreshCw, Phone, Mail, Check, X } from 'lucide-react';
+import { Plus, Search, RefreshCw, Phone, Mail, Check, X, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../config/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -194,6 +194,25 @@ export const LeadInquiriesPage = () => {
         title="Lead Inquiries"
         subtitle="Manage incoming inquiries from website, phone, WhatsApp, and social media"
         breadcrumbs={[{ label: 'Home', path: '/dashboard' }, { label: 'Lead Inquiries' }]}
+        action={
+          <button
+            onClick={async () => {
+              try {
+                const res = await api.patch('/lead-inquiries/mark-all-read');
+                if (res.data?.success) {
+                  toast.success('All new leads marked as read.');
+                  fetchLeads();
+                  window.dispatchEvent(new CustomEvent('notification-update'));
+                }
+              } catch {
+                toast.error('Failed to mark leads as read.');
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all"
+          >
+            <Check size={14} /> Mark All Read
+          </button>
+        }
       />
 
       <Card>
