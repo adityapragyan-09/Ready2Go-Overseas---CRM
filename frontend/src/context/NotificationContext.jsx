@@ -96,6 +96,17 @@ export const NotificationProvider = ({ children }) => {
     return () => window.removeEventListener('focus', handleFocus);
   }, [fetchUnreadCount]);
 
+  // Listen for custom notification-update events from other components
+  // (e.g., assignment approval triggers this to update badge instantly)
+  useEffect(() => {
+    const handleCustomUpdate = () => {
+      lastFetchRef.current = Date.now();
+      fetchUnreadCount();
+    };
+    window.addEventListener('notification-update', handleCustomUpdate);
+    return () => window.removeEventListener('notification-update', handleCustomUpdate);
+  }, [fetchUnreadCount]);
+
   return (
     <NotificationContext.Provider value={{
       unreadCount, notifications, isLoading, fetchErrorCount,

@@ -281,10 +281,10 @@ export const ApplicantForm = ({
             <option value="">Unassigned</option>
             {employees
               .filter(emp => emp.role !== 'admin' && emp.is_active !== false)
-              .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+              .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
               .map((emp) => (
               <option key={emp.id} value={emp.id}>
-                {emp.name}
+                {emp.full_name}
               </option>
             ))}
             {employees.filter(emp => emp.role !== 'admin' && emp.is_active !== false).length === 0 && (

@@ -163,12 +163,14 @@ export const InboxPage = () => {
 
   const handleMarkRead = useCallback((id) => {
     markAsRead(id);
+    window.dispatchEvent(new CustomEvent('notification-update'));
   }, [markAsRead]);
 
   const handleMarkAllRead = useCallback(async () => {
     try {
       await markAllAsRead();
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      window.dispatchEvent(new CustomEvent('notification-update'));
       toast.success('All marked as read.');
     } catch { toast.error('Failed to mark all as read.'); }
   }, [markAllAsRead]);

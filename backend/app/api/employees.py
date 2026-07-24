@@ -111,10 +111,11 @@ def list_employees_route(
     page: int = Query(default=1, ge=1),
     page_size: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
     """
     List all employees with search, filters, and pagination.
+    Accessible to all authenticated users (needed for assignment dropdowns).
     By default excludes archived employees unless include_archived=true
     or is_active filter is explicitly provided.
     """

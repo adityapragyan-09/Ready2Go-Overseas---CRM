@@ -124,20 +124,12 @@ def create_applicant(db: Session, data: ApplicantCreate, *, created_by: int) -> 
         logger.exception("Failed to log system message for applicant %s.", applicant.id)
 
     # Notification trigger: Applicant created
+    # CRM-created applicants use "progress" module (not "applicant" which is for
+    # website-originated lead inquiries). Assignment notifications still use
+    # "applicant" module since they relate to lead assignment workflow.
     try:
         from app.services.notification_service import create_notification
-        create_notification(
-            db,
-            title="New Applicant Registered",
-            message=f"Applicant '{applicant.full_name}' ({applicant.applicant_code}) has been registered.",
-            type="success",
-            module="applicant",
-            priority="medium",
-            recipient_user_id=created_by,
-            created_by=created_by,
-            reference_type="applicant",
-            reference_id=applicant.id,
-        )
+        # Only notify the recipient if they're not the creator (system-generated)
         if applicant.assigned_to and applicant.assigned_to != created_by:
             create_notification(
                 db,

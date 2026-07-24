@@ -73,11 +73,13 @@ export const AssignmentRequestsPage = () => {
     if (!approveTarget) return;
     setActionLoading(true);
     try {
-      const res = await api.patch(`/assignment-requests/${approveTarget.id}/approve`);
+      const res = await api.patch(`/assignment-requests/${approveTarget.id}/approve`, {});
       if (res.data?.success) {
         toast.success('Assignment approved.');
         setApproveTarget(null);
         fetchRequests();
+        // Also refresh sidebar counts to update notification badge
+        window.dispatchEvent(new CustomEvent('notification-update'));
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Approval failed.');
