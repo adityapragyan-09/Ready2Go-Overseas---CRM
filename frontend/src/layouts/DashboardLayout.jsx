@@ -56,11 +56,11 @@ const DashboardLayout = () => {
     const fetchCounts = async () => {
       try {
         const [leadRes, pendingRes] = await Promise.all([
-          api.get('/lead-inquiries?page_size=1').catch(() => ({ data: { success: false } })),
+          api.get('/lead-inquiries?status=NEW&page_size=1').catch(() => ({ data: { success: false } })),
           api.get('/assignment-requests?status=PENDING').catch(() => ({ data: { success: false } })),
         ]);
         const counts = {};
-        // Lead Inquiries badge: use total count from lead-inquiries endpoint
+        // Lead Inquiries badge: count only NEW (unread) leads
         if (leadRes.data?.success) counts.leads = leadRes.data.data.total || 0;
         if (pendingRes.data?.success) counts.pendingRequests = pendingRes.data.data.total || 0;
         setSidebarCounts(counts);

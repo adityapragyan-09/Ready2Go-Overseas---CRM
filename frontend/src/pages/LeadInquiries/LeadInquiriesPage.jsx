@@ -28,6 +28,11 @@ export const LeadInquiriesPage = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
+
+  // Refresh sidebar badge on mount
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('notification-update'));
+  }, []);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');

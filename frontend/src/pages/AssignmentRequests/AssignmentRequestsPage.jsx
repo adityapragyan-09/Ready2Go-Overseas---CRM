@@ -23,6 +23,11 @@ export const AssignmentRequestsPage = () => {
   const isAdmin = user?.role === 'admin';
 
   const [requests, setRequests] = useState([]);
+
+  // Refresh sidebar badge on mount
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('notification-update'));
+  }, []);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);

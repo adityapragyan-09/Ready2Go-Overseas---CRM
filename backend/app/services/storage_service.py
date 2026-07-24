@@ -135,6 +135,7 @@ def delete_file(storage_path: str) -> None:
 def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     """
     Generate a temporary, secure signed URL to retrieve a file from private storage.
+    Tries the current Supabase Storage API format first, falls back to legacy format.
     """
     if settings.ENVIRONMENT != "production" and (
         not settings.SUPABASE_URL or not settings.SUPABASE_KEY or "dummy" in settings.SUPABASE_URL or "dummy" in settings.SUPABASE_KEY
@@ -142,53 +143,76 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
         _safe_local_path(storage_path)
         return f"http://localhost:8000/uploads/{storage_path}"
 
-    # Supabase Storage v1: POST /object/sign/{bucket_id} with path in body
-    url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{settings.SUPABASE_BUCKET}"
     headers = _get_headers()
     headers["Content-Type"] = "application/json"
+    base_url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{settings.SUPABASE_BUCKET}"
 
+    # Attempt 1: Current API — path in request body, bucket in URL
     try:
         response = requests.post(
-            url,
+            base_url,
             json={"path": storage_path, "expiresIn": expires_in},
             headers=headers,
             timeout=60,
         )
-        if response.status_code != 200:
+        if response.status_code == 200:
+            data = response.json()
+            signed_url = data.get("signedURL") or data.get("signedUrl")
+            if signed_url:
+                if signed_url.startswith("/"):
+                    signed_url = f"{settings.SUPABASE_URL}{signed_url}"
+                logger.info("Signed URL generated (v1 body api) for %s", storage_path)
+                return signed_url
+            else:
+                logger.warning("Empty signed URL in response body api: %s", data)
+        else:
+            logger.warning(
+                "Signed URL attempt 1 failed [status=%s body=%s] — trying legacy format",
+                response.status_code, response.text,
+            )
+    except requests.RequestException as e:
+        logger.warning("Signed URL attempt 1 network error: %s — trying legacy format", e)
+
+    # Attempt 2: Legacy API — path in URL, only expiresIn in body
+    try:
+        legacy_url = f"{base_url}/{storage_path}"
+        response = requests.post(
+            legacy_url,
+            json={"expiresIn": expires_in},
+            headers=headers,
+            timeout=60,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            signed_url = data.get("signedURL") or data.get("signedUrl")
+            if signed_url:
+                if signed_url.startswith("/"):
+                    signed_url = f"{settings.SUPABASE_URL}{signed_url}"
+                logger.info("Signed URL generated (legacy api) for %s", storage_path)
+                return signed_url
+            else:
+                logger.warning("Empty signed URL in response legacy api: %s", data)
+        else:
             logger.error(
-                "Supabase signed URL failed [status=%s path=%s] response=%s",
-                response.status_code,
-                storage_path,
-                response.text,
+                "Both signed URL formats failed. Last attempt [status=%s path=%s] response=%s",
+                response.status_code, storage_path, response.text,
             )
             if response.status_code in (401, 403):
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail="Storage authentication failed. Check SUPABASE_URL and SUPABASE_KEY configuration.",
                 )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to generate document access URL.",
-            )
-        data = response.json()
-        signed_url = data.get("signedURL") or data.get("signedUrl")
-        if not signed_url:
-            logger.error("Supabase signed URL response missing signedURL field: %s", data)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Storage service returned an unexpected response.",
-            )
-
-        if signed_url.startswith("/"):
-            signed_url = f"{settings.SUPABASE_URL}{signed_url}"
-
-        return signed_url
     except requests.RequestException as e:
-        logger.exception("Storage signed URL network error for path %s", storage_path)
+        logger.exception("Storage signed URL all attempts failed for path %s", storage_path)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Storage service is currently unavailable.",
         )
+
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Failed to generate document access URL.",
+    )
 
 
 def download_file_as_bytes(file_url: str) -> bytes:
