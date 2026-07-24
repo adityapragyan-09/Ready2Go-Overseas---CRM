@@ -146,25 +146,49 @@ def upload_file(file_data: bytes, storage_path: str, mime_type: str) -> dict:
     headers["Content-Type"] = mime_type
     content = file_data.read() if hasattr(file_data, "read") else file_data
 
+    logger.info("=" * 70)
+    logger.info("UPLOAD FILE — FULL TRACE")
+    logger.info("=" * 70)
+    logger.info("  endpoint:        POST %s", url.replace(SERVICE_KEY, "***") if SERVICE_KEY else url)
+    logger.info("  bucket:          '%s'", BUCKET)
+    logger.info("  storage_path:    '%s'", storage_path)
+    logger.info("  storage_path chars: %s", [c for c in storage_path])
+    logger.info("  content_type:    '%s'", mime_type)
+    logger.info("  content_length:  %d bytes", len(content))
+
     try:
         resp = requests.post(url, data=content, headers=headers, timeout=TIMEOUT)
+        logger.info("  RESPONSE status: %d", resp.status_code)
+        logger.info("  RESPONSE headers: %s", dict(resp.headers))
+        logger.info("  RESPONSE body:    %.3000s", resp.text or "(empty)")
+
         if resp.status_code != 200:
             if resp.status_code in (401, 403):
                 return {"success": False, "error": "STORAGE_AUTH_FAILED", "status_code": 502}
             return {"success": False, "error": "UPLOAD_FAILED", "status_code": 502, "detail": resp.text[:500]}
 
         # Normalise returned Key
+        returned_key = None
         try:
-            returned_key = resp.json().get("Key")
-            if returned_key:
-                canonical = _normalize(returned_key)
-                if canonical != storage_path:
-                    logger.info("PATH NORMALISED: '%s' → '%s' (from Key)", storage_path, canonical)
-                    storage_path = canonical
-        except Exception:
-            pass
+            resp_data = resp.json()
+            returned_key = resp_data.get("Key")
+        except Exception as exc:
+            logger.warning("  could not parse JSON: %s", exc)
 
-        logger.info("UPLOAD OK: %s (%d bytes)", storage_path, len(content))
+        if returned_key:
+            logger.info("  RETURNED Key:       '%s'", returned_key)
+            logger.info("  RETURNED Key chars: %s", [c for c in returned_key])
+            canonical = _normalize(returned_key)
+            logger.info("  normalized Key:     '%s'", canonical)
+            if canonical != storage_path:
+                logger.info("  *** PATH CHANGED: '%s' → '%s' ***", storage_path, canonical)
+                storage_path = canonical
+        else:
+            logger.info("  RETURNED Key: (none/empty)")
+
+        logger.info("  FINAL canonical:    '%s'", storage_path)
+        logger.info("  FINAL canonical chars: %s", [c for c in storage_path])
+        logger.info("=" * 70)
         return {"success": True, "data": {"canonical_path": storage_path}}
 
     except requests.RequestException as e:
@@ -190,26 +214,28 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> dict:
         {"success": False, "error": "...", "status_code": 502}
     """
     raw_input = storage_path
-    storage_path = _normalize(storage_path)
+    normalized_path = _normalize(storage_path)
 
     logger.info("=" * 70)
     logger.info("GENERATE SIGNED URL — FULL TRACE")
     logger.info("=" * 70)
     logger.info("  Step 0: Input")
-    logger.info("    raw from DB:   '%s'", raw_input)
-    logger.info("    normalized:    '%s'", storage_path)
-    logger.info("    char repr DB:  %s", [c for c in raw_input])
-    logger.info("    char repr norm:%s", [c for c in storage_path])
-    logger.info("    len DB:       %d", len(raw_input))
-    logger.info("    len norm:     %d", len(storage_path))
+    logger.info("    raw from DB:       '%s'", raw_input)
+    logger.info("    normalized:        '%s'", normalized_path)
+    logger.info("    char repr DB:      %s", [c for c in raw_input])
+    logger.info("    char repr norm:    %s", [c for c in normalized_path])
+    logger.info("    len DB:            %d", len(raw_input))
+    logger.info("    len norm:          %d", len(normalized_path))
+    logger.info("    BUCKET config:     '%s'", BUCKET)
+    logger.info("    ORIGIN config:     '%s'", ORIGIN)
 
     if _is_local():
-        _safe_local_path(storage_path)
-        return {"success": True, "data": {"signed_url": f"http://localhost:8000/uploads/{storage_path}", "expires_in": expires_in}}
+        _safe_local_path(normalized_path)
+        return {"success": True, "data": {"signed_url": f"http://localhost:8000/uploads/{normalized_path}", "expires_in": expires_in}}
 
     # ── Step 1: Verify object exists in the bucket ───────────────────
-    parent = "/".join(storage_path.split("/")[:-1])
-    filename = storage_path.split("/")[-1]
+    parent = "/".join(normalized_path.split("/")[:-1])
+    filename = normalized_path.split("/")[-1]
 
     logger.info("  Step 1: Object verification")
     logger.info("    parent folder:  '%s'", parent)
@@ -225,7 +251,7 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> dict:
         logger.info("    file_in_list:  %s", exists)
         if not exists:
             logger.error("    *** OBJECT NOT FOUND in folder '%s' ***", parent)
-            logger.error("    DB path:       '%s'", storage_path)
+            logger.error("    DB path:       '%s'", normalized_path)
             logger.error("    Expected file: '%s'", filename)
             # Try with bucket prefix variants
             bucket_variant = f"{BUCKET}/{parent}"
@@ -245,7 +271,7 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> dict:
         logger.error("    list_folder FAILED: %s", listing.get("error"))
 
     # ── Step 2: Build the sign request ─────────────────────
-    encoded = urllib.parse.quote(storage_path, safe="/")
+    encoded = urllib.parse.quote(normalized_path, safe="/")
     endpoint = f"{ORIGIN}/storage/v1/object/sign/{BUCKET}/{encoded}"
     body = {"expiresIn": expires_in}
     req_headers = _auth_headers()
@@ -253,7 +279,7 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> dict:
 
     logger.info("  Step 2: Sign request")
     logger.info("    bucket:           '%s'", BUCKET)
-    logger.info("    object_path:      '%s'", storage_path)
+    logger.info("    object_path:      '%s'", normalized_path)
     logger.info("    encoded_path:     '%s'", encoded)
     logger.info("    endpoint(raw):    %s", endpoint)
     logger.info("    endpoint(safe):   %s", endpoint.replace(ORIGIN, "<origin>", 1))
@@ -297,6 +323,7 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> dict:
 
         # ── Step 6: Backend-verify the signed URL with a GET request ──
         logger.info("  Step 6: Backend verification GET")
+        verified = False
         try:
             verify_resp = requests.get(signed, timeout=15, allow_redirects=False)
             logger.info("    GET status:      %d", verify_resp.status_code)
@@ -304,16 +331,36 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> dict:
             logger.info("    GET body:        %.2000s", verify_resp.text or "(empty)")
             if verify_resp.status_code == 200:
                 logger.info("    *** SIGNED URL VERIFIED OK ***")
+                verified = True
+            elif verify_resp.status_code == 302:
+                redirect_url = verify_resp.headers.get("Location", "")
+                logger.info("    REDIRECT to:     %s", redirect_url)
+                try:
+                    redirect_resp = requests.get(redirect_url, timeout=15)
+                    if redirect_resp.status_code == 200:
+                        logger.info("    *** REDIRECT VERIFIED OK (HTTP 200) ***")
+                        verified = True
+                    else:
+                        logger.error("    *** REDIRECT FAILED (HTTP %d) ***", redirect_resp.status_code)
+                except Exception as redirect_err:
+                    logger.error("    *** REDIRECT ERROR: %s", redirect_err)
             else:
                 logger.error("    *** SIGNED URL VERIFICATION FAILED (HTTP %d) ***", verify_resp.status_code)
         except requests.RequestException as e:
             logger.error("    *** SIGNED URL VERIFICATION NETWORK ERROR: %s", e)
 
+        if not verified:
+            return {
+                "success": False, "error": "SIGNED_URL_FAILED",
+                "status_code": 502,
+                "detail": "Signed URL verification failed (backend GET returned non-200).",
+            }
+
         logger.info("=" * 70)
         return {"success": True, "data": {"signed_url": signed, "expires_in": expires_in}}
 
     except requests.RequestException as e:
-        logger.exception("  SIGNED URL NETWORK ERROR: %s", storage_path)
+        logger.exception("  SIGNED URL NETWORK ERROR: %s", normalized_path)
         return {"success": False, "error": "STORAGE_UNAVAILABLE", "status_code": 502}
 
 
@@ -419,7 +466,9 @@ def list_folder(prefix: str = "", limit: int = 200) -> dict:
         resp = requests.post(url, json={"prefix": list_pfx, "limit": limit, "sortBy": {"column": "name", "order": "asc"}},
                              headers=headers, timeout=15)
         if resp.status_code == 200:
-            names = [item.get("name", "") for item in resp.json()]
+            objects = resp.json()
+            names = [item.get("name", "") for item in objects]
+            logger.info("LIST: prefix='%s' → %d objects: %s", list_pfx, len(names), names)
             return {"success": True, "data": {"objects": names}}
         return {"success": False, "error": "BUCKET_UNAVAILABLE", "status_code": 502, "detail": resp.text[:300]}
     except Exception as e:
