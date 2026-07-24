@@ -3,8 +3,6 @@ Ready2Go CRM — Supabase Storage REST Client Service
 
 Handles raw HTTP communications with Supabase Storage API for uploading,
 deleting, and signing download links for applicant documents.
-
-Includes comprehensive diagnostic logging for troubleshooting.
 """
 
 import logging
@@ -43,12 +41,13 @@ def _safe_local_path(storage_path: str) -> Path:
 
 def upload_file(file_data, storage_path: str, mime_type: str) -> str:
     """
-    Upload a file to Supabase Storage. Supports streaming via file-like objects.
+    Upload a file to Supabase Storage.
 
     Stores the object at `{bucket}/{storage_path}`. The storage_path is
-    returned and also stored in the DB. Signed URLs use the exact same
-    storage_path to reference the object.
+    stored verbatim in the DB and later used for signed URL generation.
     """
+    storage_path = storage_path.strip()
+
     if settings.ENVIRONMENT != "production" and (
         not settings.SUPABASE_URL or not settings.SUPABASE_KEY or "dummy" in settings.SUPABASE_URL or "dummy" in settings.SUPABASE_KEY
     ):
@@ -63,53 +62,39 @@ def upload_file(file_data, storage_path: str, mime_type: str) -> str:
     headers = _get_headers(mime_type)
 
     logger.info(
-        "Uploading document to Supabase: bucket=%s storage_path=%s url=%s",
+        "UPLOAD: bucket=%s path=%s url=%s",
         settings.SUPABASE_BUCKET, storage_path,
         url.replace(settings.SUPABASE_KEY, "***") if settings.SUPABASE_KEY else url,
     )
 
     try:
         response = requests.post(url, data=file_data, headers=headers, timeout=settings.UPLOAD_TIMEOUT_SECONDS)
-        if response.status_code != 200:
-            logger.error(
-                "Supabase upload failed [status=%s path=%s] response_body=%s",
-                response.status_code, storage_path, response.text,
-            )
-            if response.status_code in (401, 403):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Storage authentication failed. Check SUPABASE_URL and SUPABASE_KEY configuration.",
-                )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="File upload to storage failed.",
-            )
+        logger.info(
+            "UPLOAD RESPONSE: status=%s body=%s",
+            response.status_code, response.text[:500] if response.text else "(empty)",
+        )
 
-        # Verify response body confirms the object key matches storage_path
+        if response.status_code != 200:
+            if response.status_code in (401, 403):
+                raise HTTPException(status_code=502, detail="Storage authentication failed.")
+            raise HTTPException(status_code=502, detail="File upload to storage failed.")
+
         try:
             resp_data = response.json()
             returned_key = resp_data.get("Key")
-            logger.info(
-                "Upload success: status=%s returned_Key=%s expected_path=%s full_response=%s",
-                response.status_code, returned_key, storage_path, resp_data,
-            )
+            logger.info("UPLOAD KEY: returned=%s expected=%s", returned_key, storage_path)
         except Exception:
-            logger.info(
-                "Upload success: status=%s response_body=%s path=%s",
-                response.status_code, response.text[:500], storage_path,
-            )
+            pass
 
         return f"{settings.SUPABASE_URL}/storage/v1/object/public/{settings.SUPABASE_BUCKET}/{storage_path}"
     except requests.RequestException as e:
         logger.exception("Storage upload network error for path %s", storage_path)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Storage service is currently unavailable.",
-        )
+        raise HTTPException(status_code=502, detail="Storage service is currently unavailable.")
 
 
 def delete_file(storage_path: str) -> None:
     """Remove a file from the Supabase Storage bucket."""
+    storage_path = storage_path.strip()
     if settings.ENVIRONMENT != "production" and (
         not settings.SUPABASE_URL or not settings.SUPABASE_KEY or "dummy" in settings.SUPABASE_URL or "dummy" in settings.SUPABASE_KEY
     ):
@@ -122,40 +107,31 @@ def delete_file(storage_path: str) -> None:
     headers = _get_headers()
     headers["Content-Type"] = "application/json"
 
-    logger.info("Deleting document: bucket=%s path=%s", settings.SUPABASE_BUCKET, storage_path)
+    logger.info("DELETE: bucket=%s path=%s", settings.SUPABASE_BUCKET, storage_path)
 
     try:
         response = requests.delete(url, json={"prefixes": [storage_path]}, headers=headers, timeout=60)
         if response.status_code not in (200, 204):
-            logger.error(
-                "Supabase delete failed [status=%s path=%s] response=%s",
-                response.status_code, storage_path, response.text,
-            )
+            logger.error("DELETE FAILED: status=%s body=%s", response.status_code, response.text)
             if response.status_code in (401, 403):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Storage authentication failed.",
-                )
+                raise HTTPException(status_code=502, detail="Storage authentication failed.")
         else:
-            logger.info("Delete success for path=%s", storage_path)
+            logger.info("DELETE SUCCESS: path=%s", storage_path)
     except requests.RequestException as e:
         logger.exception("Storage delete network error for path %s", storage_path)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Storage service is currently unavailable.",
-        )
+        raise HTTPException(status_code=502, detail="Storage service is currently unavailable.")
 
 
 def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     """
-    Generate a temporary, secure signed URL to retrieve a file from private storage.
+    Generate a temporary signed URL for a file in private storage.
 
-    Tries two API formats:
-      1) Current API:  POST /object/sign/{bucket}       body={"path": path, "expiresIn": N}
-      2) Legacy API:   POST /object/sign/{bucket}/{path} body={"expiresIn": N}
-
-    Returns the full signed URL string.
+    Tries two API formats in order:
+      1) Body API:  POST /object/sign/{bucket}       body={"path":p, "expiresIn":N}
+      2) Legacy API: POST /object/sign/{bucket}/{path} body={"expiresIn":N}
     """
+    storage_path = storage_path.strip()
+
     if settings.ENVIRONMENT != "production" and (
         not settings.SUPABASE_URL or not settings.SUPABASE_KEY or "dummy" in settings.SUPABASE_URL or "dummy" in settings.SUPABASE_KEY
     ):
@@ -166,167 +142,191 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     headers["Content-Type"] = "application/json"
     base_url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{settings.SUPABASE_BUCKET}"
 
-    logger.info(
-        "Generating signed URL: bucket=%s storage_path=%s expires_in=%s",
-        settings.SUPABASE_BUCKET, storage_path, expires_in,
-    )
+    logger.info("SIGNED URL REQUEST: bucket=%s path='%s' expires=%s", settings.SUPABASE_BUCKET, storage_path, expires_in)
 
-    # ── Attempt 1: Current API (path in body) ──────────────
+    # ── Attempt 1: Current API (path in request body) ──
     try:
-        response = requests.post(
-            base_url,
-            json={"path": storage_path, "expiresIn": expires_in},
-            headers=headers,
-            timeout=60,
-        )
+        response = requests.post(base_url, json={"path": storage_path, "expiresIn": expires_in}, headers=headers, timeout=60)
+        logger.info("SIGNED URL ATTEMPT 1 (body API): status=%s body=%s", response.status_code, response.text[:500] if response.text else "(empty)")
         if response.status_code == 200:
             data = response.json()
             signed_url = data.get("signedURL") or data.get("signedUrl")
             if signed_url:
-                if signed_url.startswith("/"):
-                    signed_url = f"{settings.SUPABASE_URL}{signed_url}"
-                logger.info(
-                    "Signed URL generated (body API): path=%s url_prefix=%s...",
-                    storage_path, signed_url[:80],
-                )
-                return signed_url
-            else:
-                logger.warning(
-                    "Signed URL body API returned empty URL. Full response: %s", data,
-                )
-        else:
-            logger.warning(
-                "Signed URL attempt 1 (body API) failed: status=%s body=%s",
-                response.status_code, response.text,
-            )
+                full_url = _resolve_signed_url(signed_url)
+                logger.info("SIGNED URL SUCCESS (body API): path=%s url_len=%d", storage_path, len(full_url))
+                return full_url
     except requests.RequestException as e:
-        logger.warning("Signed URL attempt 1 network error: %s", e)
+        logger.warning("SIGNED URL attempt 1 network error: %s", e)
 
-    # ── Attempt 2: Legacy API (path in URL) ────────────────
+    # ── Attempt 2: Legacy API (path in URL) ──
     try:
-        legacy_url = f"{base_url}/{storage_path}"
-        response = requests.post(
-            legacy_url,
-            json={"expiresIn": expires_in},
-            headers=headers,
-            timeout=60,
-        )
+        encoded_path = urllib.parse.quote(storage_path, safe="/")
+        legacy_url = f"{base_url}/{encoded_path}"
+        response = requests.post(legacy_url, json={"expiresIn": expires_in}, headers=headers, timeout=60)
+        logger.info("SIGNED URL ATTEMPT 2 (legacy API): status=%s body=%s", response.status_code, response.text[:500] if response.text else "(empty)")
         if response.status_code == 200:
             data = response.json()
             signed_url = data.get("signedURL") or data.get("signedUrl")
             if signed_url:
-                if signed_url.startswith("/"):
-                    signed_url = f"{settings.SUPABASE_URL}{signed_url}"
-                logger.info(
-                    "Signed URL generated (legacy API): path=%s url_prefix=%s...",
-                    storage_path, signed_url[:80],
-                )
-                return signed_url
-            else:
-                logger.warning(
-                    "Signed URL legacy API returned empty URL. Full response: %s", data,
-                )
-        else:
-            logger.error(
-                "Both signed URL formats failed. Last attempt: status=%s path=%s response=%s",
-                response.status_code, storage_path, response.text,
-            )
-            if response.status_code in (401, 403):
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Storage authentication failed. Check SUPABASE_URL and SUPABASE_KEY configuration.",
-                )
+                full_url = _resolve_signed_url(signed_url)
+                logger.info("SIGNED URL SUCCESS (legacy API): path=%s url_len=%d", storage_path, len(full_url))
+                return full_url
     except requests.RequestException as e:
-        logger.exception("Storage signed URL all attempts failed for path %s", storage_path)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Storage service is currently unavailable.",
-        )
+        logger.warning("SIGNED URL attempt 2 network error: %s", e)
 
-    raise HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail="Failed to generate document access URL.",
-    )
+    raise HTTPException(status_code=502, detail="Failed to generate document access URL.")
+
+
+def _resolve_signed_url(signed_url: str) -> str:
+    """Convert a signed URL response to a full absolute URL."""
+    if signed_url.startswith("http://") or signed_url.startswith("https://"):
+        return signed_url
+    if signed_url.startswith("/"):
+        return f"{settings.SUPABASE_URL}{signed_url}"
+    # Relative URL — prepend base
+    return f"{settings.SUPABASE_URL}/{signed_url}"
 
 
 def download_file_as_bytes(file_url: str) -> bytes:
-    """Download a file from a signed URL and return its contents as bytes."""
+    """Download a file from a signed URL."""
     try:
         response = requests.get(file_url, timeout=60)
         response.raise_for_status()
-        logger.info("Downloaded file from signed URL: status=%s size=%s", response.status_code, len(response.content))
+        logger.info("DOWNLOAD: status=%s size=%s", response.status_code, len(response.content))
         return response.content
     except requests.RequestException as e:
         logger.exception("Failed to download file from %s", file_url[:80])
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to download file from storage.",
+        raise HTTPException(status_code=502, detail="Failed to download file from storage.")
+
+
+# ── Diagnostics ────────────────────────────
+
+def list_storage_objects(prefix: str = "", limit: int = 100) -> list[dict]:
+    """List objects in the bucket with the given prefix. Returns list of {name, id, ...}."""
+    if not settings.SUPABASE_URL or "dummy" in settings.SUPABASE_URL:
+        return []
+
+    url = f"{settings.SUPABASE_URL}/storage/v1/object/list/{settings.SUPABASE_BUCKET}"
+    headers = _get_headers()
+    headers["Content-Type"] = "application/json"
+
+    # Ensure prefix ends with / for directory listing
+    list_prefix = prefix
+    if list_prefix and not list_prefix.endswith("/"):
+        list_prefix = f"{list_prefix}/"
+
+    try:
+        resp = requests.post(
+            url,
+            json={"prefix": list_prefix, "limit": limit, "sortBy": {"column": "name", "order": "asc"}},
+            headers=headers,
+            timeout=15,
         )
+        if resp.status_code == 200:
+            items = resp.json()
+            # items is a list of objects: [{name, id, updated_at, ...}]
+            logger.info("LIST %s: found %d objects, response=%s", list_prefix, len(items), resp.text[:500])
+            return items
+        else:
+            logger.warning("LIST %s failed: status=%s body=%s", list_prefix, resp.status_code, resp.text[:200])
+            return []
+    except Exception as e:
+        logger.warning("LIST %s error: %s", list_prefix, e)
+        return []
 
 
 def diagnose_storage_path(storage_path: str) -> dict:
     """
-    Diagnostic function: attempt to verify an object exists in storage.
-    Returns a dict with diagnostic info (never raises).
-    Used for debugging storage issues.
+    Full storage path diagnostics.
+    Compares DB storage_path with actual bucket contents.
+    Never raises — returns a dict with all findings.
     """
+    storage_path = storage_path.strip()
     result = {
-        "storage_path": storage_path,
+        "db_storage_path": storage_path,
         "bucket": settings.SUPABASE_BUCKET,
-        "uploads_pingable": False,
-        "upload_url": None,
-        "signed_url": None,
+        "supabase_url": settings.SUPABASE_URL.replace(settings.SUPABASE_KEY, "***") if settings.SUPABASE_KEY else settings.SUPABASE_URL,
         "errors": [],
     }
 
     if not settings.SUPABASE_URL or "dummy" in settings.SUPABASE_URL:
-        result["errors"].append("SUPABASE_URL is not configured (dummy value detected)")
+        result["error"] = "SUPABASE_URL not configured"
         return result
 
+    # Extract path components
+    path_parts = storage_path.split("/")
+    result["filename"] = path_parts[-1] if path_parts else storage_path
+    result["parent_dir"] = "/".join(path_parts[:-1]) if len(path_parts) > 1 else ""
+
+    # 1. Ping the bucket
     try:
-        # Test 1: Check if the storage API is reachable
-        ping_url = f"{settings.SUPABASE_URL}/storage/v1/object/list/{settings.SUPABASE_BUCKET}"
-        headers = _get_headers()
-        headers["Content-Type"] = "application/json"
-        resp = requests.post(ping_url, json={"prefix": "", "limit": 1}, headers=headers, timeout=10)
-        result["uploads_pingable"] = resp.status_code in (200, 404)
-        if resp.status_code == 200:
-            objects = resp.json()
-            result["bucket_object_count"] = len(objects)
-        else:
-            result["bucket_ping_status"] = resp.status_code
-            result["bucket_ping_body"] = resp.text[:200]
-
-        # Test 2: Try listing objects in the parent directory
-        parent_dir = "/".join(storage_path.split("/")[:-1]) if "/" in storage_path else ""
-        if parent_dir:
-            list_url = f"{settings.SUPABASE_URL}/storage/v1/object/list/{settings.SUPABASE_BUCKET}"
-            list_resp = requests.post(
-                list_url,
-                json={"prefix": parent_dir, "limit": 100},
-                headers=headers,
-                timeout=10,
-            )
-            if list_resp.status_code == 200:
-                items = list_resp.json()
-                filenames = [item.get("name", "") for item in items]
-                result["parent_dir"] = parent_dir
-                result["objects_in_parent"] = filenames
-                result["path_exists"] = storage_path.split("/")[-1] in filenames
-            else:
-                result["list_status"] = list_resp.status_code
-                result["list_body"] = list_resp.text[:200]
-
-        # Test 3: Try to generate a signed URL (capture any error)
-        try:
-            signed = generate_signed_url(storage_path, expires_in=60)
-            result["signed_url_generated"] = True
-            result["signed_url_prefix"] = signed[:100] if signed else None
-        except Exception as e:
-            result["signed_url_generated"] = False
-            result["signed_url_error"] = str(e)
-
+        root_items = list_storage_objects(prefix="", limit=1)
+        result["bucket_reachable"] = True
+        result["has_applicants_folder"] = any(
+            item.get("name") == "applicants" for item in root_items
+        )
     except Exception as e:
-        result["errors"].append(f"Diagnostic error: {e}")
+        result["bucket_reachable"] = False
+        result["errors"].append(f"Bucket ping failed: {e}")
+        result["has_applicants_folder"] = "unknown"
+
+    # 2. List applicant directory to find all APP- folders
+    try:
+        applicant_items = list_storage_objects(prefix="applicants", limit=100)
+        app_folders = [item.get("name", "") for item in applicant_items]
+        result["applicant_folders_in_storage"] = app_folders
+
+        # Check if our specific APP folder exists
+        app_folder = path_parts[0] + "/" + path_parts[1] if len(path_parts) >= 2 else ""
+        result["app_folder_in_list"] = app_folder in app_folders
+        result["expected_app_folder"] = app_folder
+    except Exception as e:
+        result["errors"].append(f"Applicant folder list failed: {e}")
+
+    # 3. List objects in the specific APP- folder
+    parent_dir = result["parent_dir"]
+    if parent_dir:
+        try:
+            dir_items = list_storage_objects(prefix=parent_dir, limit=100)
+            result["objects_in_folder"] = [item.get("name", "") for item in dir_items]
+            result["file_exists_in_storage"] = result["filename"] in result["objects_in_folder"]
+
+            # Compare full paths (some APIs return full path, some return basename)
+            full_paths = [
+                f"{parent_dir}/{item.get('name', '')}" if not item.get("name", "").startswith(parent_dir) else item.get("name", "")
+                for item in dir_items
+            ]
+            result["full_paths_in_folder"] = full_paths
+            result["full_path_matches_db"] = storage_path in full_paths
+        except Exception as e:
+            result["errors"].append(f"File list failed: {e}")
+
+    # 4. Try to generate a signed URL
+    try:
+        signed_url = generate_signed_url(storage_path, expires_in=120)
+        result["signed_url_generated"] = True
+        result["signed_url_full"] = signed_url
+
+        # Verify the signed URL by making a HEAD request
+        try:
+            head_resp = requests.head(signed_url, timeout=10)
+            result["signed_url_head_status"] = head_resp.status_code
+            result["signed_url_head_headers"] = dict(head_resp.headers)
+
+            # If HEAD fails, try GET with range (just first byte)
+            if head_resp.status_code != 200:
+                get_resp = requests.get(signed_url, headers={"Range": "bytes=0-0"}, timeout=10)
+                result["signed_url_get_range_status"] = get_resp.status_code
+                result["signed_url_get_range_body"] = get_resp.text[:200]
+        except requests.RequestException as e:
+            result["signed_url_verify_error"] = str(e)
+    except Exception as e:
+        result["signed_url_generated"] = False
+        result["signed_url_error"] = str(e)
+
+    # 5. Check for common path issues
+    result["path_has_leading_slash"] = storage_path.startswith("/")
+    result["path_has_trailing_slash"] = storage_path.endswith("/")
+    result["path_has_bucket_prefix"] = storage_path.startswith(settings.SUPABASE_BUCKET)
 
     return result
