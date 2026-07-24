@@ -307,16 +307,27 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> dict:
         # ── Step 4: Extract URL from response ───────────────
         raw_url = _extract_signed_url(resp)
         logger.error("  >>> Step 4: Extract signed URL <<<")
-        logger.error("    extracted:       '%s'", raw_url[:120] if raw_url else "None")
+        logger.error("    extracted:       '%s'", raw_url[:200] if raw_url else "None")
+        logger.error("    starts with /storage/v1: %s",
+                     raw_url.startswith("/storage/v1") if raw_url else "N/A")
+        logger.error("    starts with /object/sign: %s",
+                     raw_url.startswith("/object/sign") if raw_url else "N/A")
 
         if not raw_url:
             return {"success": False, "error": "SIGNED_URL_FAILED",
                     "status_code": 502, "detail": "Could not extract URL from response"}
 
         # ── Step 5: Make absolute ─────────────────────
+        # Supabase sign endpoint may return a signed URL path WITHOUT the
+        # /storage/v1 prefix (e.g. /object/sign/{bucket}/{path}?token=...)
+        # instead of the proper /storage/v1/object/sign/{bucket}/{path}.
+        # Prepend /storage/v1 when missing.
         if raw_url.startswith("http://") or raw_url.startswith("https://"):
             signed = raw_url
         elif raw_url.startswith("/"):
+            if not raw_url.startswith("/storage/v1") and "/object/sign/" in raw_url:
+                logger.error("  *** PREPENDING /storage/v1 (Supabase returned path without prefix) ***")
+                raw_url = f"/storage/v1{raw_url}"
             signed = f"{ORIGIN}{raw_url}"
         else:
             signed = f"{ORIGIN}/{raw_url}"
