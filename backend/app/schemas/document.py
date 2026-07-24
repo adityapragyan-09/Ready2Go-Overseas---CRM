@@ -1,11 +1,11 @@
 """
-Ready2Go CRM — Document Schemas
+Ready2Go CRM — Document Schemas (v2)
 
-Pydantic models for Document metadata serialization and validation.
+Pydantic models for API serialization and validation.
 """
 
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class DocumentResponse(BaseModel):
@@ -21,23 +21,41 @@ class DocumentResponse(BaseModel):
     file_extension: str
     file_size: int
     uploaded_by: int
-    uploaded_at: datetime
-    is_deleted: bool
+    uploaded_at: datetime | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    deleted_by: int | None = None
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 
 
-class DocumentDownloadResponse(BaseModel):
-    """Signed URL response for downloading a secure document."""
-    document_code: str
-    original_file_name: str
-    download_url: str
-
-
 class DocumentViewResponse(BaseModel):
-    """Signed URL response for viewing a secure document."""
+    """Response for signed view URL."""
     document_code: str
     original_file_name: str
     view_url: str
+    expires_in: int = 3600
 
 
+class DocumentDownloadResponse(BaseModel):
+    """Response for signed download URL."""
+    document_code: str
+    original_file_name: str
+    download_url: str
+    expires_in: int = 3600
+
+
+class DocumentUploadResponse(BaseModel):
+    """Response after successful upload."""
+    id: int
+    document_code: str
+    applicant_id: int
+    document_type: str
+    original_file_name: str
+    stored_file_name: str
+    storage_path: str
+    mime_type: str
+    file_extension: str
+    file_size: int
+    uploaded_by: int
+    uploaded_at: datetime

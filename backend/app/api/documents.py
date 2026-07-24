@@ -1,39 +1,30 @@
 """
-Ready2Go CRM — Document Management Routes
+Ready2Go CRM — Document Management Routes (v2)
 
 Router: /api/v1/documents
-Access Level: Authenticated Users (JWT required)
 
-Endpoints:
-    POST   /upload                                    — Upload a new document
-    GET    /applicant/{applicant_id}                   — List documents for an applicant
-    GET    /applicant/{applicant_id}/download-all      — Download all docs as ZIP
-    GET    /{document_id}/download                     — Get signed download URL
-    GET    /{document_id}/view                         — Get signed view URL
-    DELETE /{document_id}                              — Soft-delete a document
+Architecture:
+    Router → DocumentService → StorageService
+          ↳ DocumentRepository (via DocumentService)
+
+Every request goes through DocumentService.
+No router calls StorageService or DB directly.
 """
 
 import io
 import logging
-import zipfile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
 from app.db.session import get_db
+from app.errors.document_errors import DocumentError
 from app.models.applicant import Applicant
 from app.models.user import User
-from app.schemas.document import DocumentDownloadResponse, DocumentResponse, DocumentViewResponse
-from app.services.document_service import (
-    create_document,
-    generate_document_download,
-    get_document_by_id,
-    list_applicant_documents,
-    soft_delete_document,
-)
-from app.services.storage_service import download_file_as_bytes, generate_signed_url
+from app.repositories.document_repository import DocumentRepository
+from app.services.document_service import DocumentService
 from app.utils.response import success_response
 
 logger = logging.getLogger(__name__)
@@ -41,7 +32,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ── POST /upload ─────────────────────────────────
+def _get_service(db: Session = Depends(get_db)) -> DocumentService:
+    """Factory: inject DocumentRepository into DocumentService."""
+    repo = DocumentRepository(db)
+    return DocumentService(repo)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /upload
+# ═══════════════════════════════════════════════════════════════════════
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_document_route(
@@ -50,219 +49,220 @@ async def upload_document_route(
     document_type: str = Form(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
 ):
     """
-    Upload and register a new applicant document.
-    Validates file extension (PDF, JPG, JPEG, PNG, DOC, DOCX) and size (max 500MB).
+    Upload a document for an applicant.
+
+    Validates file type, size, and applicant. Uploads to Supabase Storage,
+    verifies the object exists, then persists the DB record.
     """
-    # Dynamically determine file size without reading bytes into RAM
+    # Validate applicant exists
+    applicant = db.query(Applicant).filter(
+        Applicant.id == applicant_id, Applicant.is_deleted == False  # noqa: E712
+    ).first()
+    if not applicant:
+        raise HTTPException(status_code=404, detail="Applicant not found.")
+
+    # Get file size
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
-    
-    document = create_document(
-        db,
-        file=file,
-        file_size=file_size,
-        applicant_id=applicant_id,
-        document_type=document_type,
-        uploaded_by=current_user.id,
-    )
 
-    logger.info(
-        "DOCUMENT UPLOADED: id=%s code=%s original='%s' stored='%s' "
-        "storage_path='%s' mime=%s size=%s",
-        document.id, document.document_code, document.original_file_name,
-        document.stored_file_name, document.storage_path,
-        document.mime_type, document.file_size,
-    )
-
-    document_data = DocumentResponse.model_validate(document).model_dump(by_alias=True)
-    return success_response(
-        message="Document uploaded successfully.",
-        data=document_data,
-    )
+    try:
+        document_data = svc.upload(
+            file=file,
+            file_size=file_size,
+            applicant_id=applicant_id,
+            document_type=document_type,
+            uploaded_by=current_user.id,
+            applicant_code=applicant.applicant_code,
+        )
+        logger.info(
+            "UPLOAD: user=%s applicant=%s doc=%s type=%s path='%s' size=%s",
+            current_user.id, applicant_id, document_data["document_code"],
+            document_type, document_data["storage_path"], file_size,
+        )
+        return success_response("Document uploaded successfully.", data=document_data)
+    except DocumentError as e:
+        logger.error("UPLOAD ERROR: %s — %s", e.code, e.message)
+        raise HTTPException(status_code=e.status_code, detail=e.message, headers={"X-Error-Code": e.code})
 
 
-# ── GET /applicant/{applicant_id} ────────────────
+# ═══════════════════════════════════════════════════════════════════════
+# GET /applicant/{applicant_id}  — List documents for an applicant
+# ═══════════════════════════════════════════════════════════════════════
 
 @router.get("/applicant/{applicant_id}")
 def list_applicant_documents_route(
     applicant_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
 ):
-    """
-    List all active (non-deleted) documents for a specific applicant.
-    """
-    documents = list_applicant_documents(db, applicant_id)
-    documents_data = [
-        DocumentResponse.model_validate(doc).model_dump(by_alias=True)
-        for doc in documents
-    ]
-    
-    return success_response(
-        message="Applicant documents retrieved successfully.",
-        data=documents_data,
-    )
+    """List all active documents for an applicant."""
+    docs = svc.list_by_applicant(applicant_id)
+    return success_response("Documents retrieved successfully.", data=docs)
 
 
-# ── GET /{document_id}/download ──────────────────
+# ═══════════════════════════════════════════════════════════════════════
+# GET /applicant/{applicant_id}/deleted  — List deleted documents
+# ═══════════════════════════════════════════════════════════════════════
 
-@router.get("/{document_id}/download")
-def download_document_route(
-    document_id: int,
+@router.get("/applicant/{applicant_id}/deleted")
+def list_deleted_documents_route(
+    applicant_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
 ):
-    """
-    Generate a secure, temporary signed download URL for a document.
-    """
-    from app.models.document import Document
-    doc = db.query(Document).filter(Document.id == document_id).first()
-
-    signed_url = generate_document_download(db, document_id)
-    # Fetch document metadata for response body
-    document = get_document_by_id(db, document_id)
-
-    logger.info(
-        "DOCUMENT DOWNLOAD: id=%s doc_code=%s storage_path='%s' signed_url_len=%s",
-        document_id, document.document_code, document.storage_path,
-        len(signed_url) if signed_url else 0,
-    )
-
-    download_data = DocumentDownloadResponse(
-        document_code=document.document_code,
-        original_file_name=document.original_file_name,
-        download_url=signed_url,
-    ).model_dump()
-
-    return success_response(
-        message="Document download URL generated successfully.",
-        data=download_data,
-    )
+    """List soft-deleted documents for an applicant (admin)."""
+    docs = svc.list_deleted_by_applicant(applicant_id)
+    return success_response("Deleted documents retrieved successfully.", data=docs)
 
 
-# ── GET /{document_id}/view ──────────────────────
-
-@router.get("/{document_id}/view")
-def view_document_route(
-    document_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Generate a secure, temporary signed view URL for a document.
-    """
-    from app.models.document import Document
-    doc = db.query(Document).filter(Document.id == document_id).first()
-
-    signed_url = generate_document_download(db, document_id)
-    # Fetch document metadata for response body
-    from app.services.document_service import get_document_by_id
-    document = get_document_by_id(db, document_id)
-
-    logger.info(
-        "DOCUMENT VIEW: id=%s doc_code=%s original_name='%s' "
-        "storage_path='%s' mime_type=%s signed_url_len=%s signed_url_start=%.120s",
-        document_id, document.document_code, document.original_file_name,
-        document.storage_path, document.mime_type,
-        len(signed_url) if signed_url else 0,
-        signed_url or "(none)",
-    )
-
-    view_data = DocumentViewResponse(
-        document_code=document.document_code,
-        original_file_name=document.original_file_name,
-        view_url=signed_url,
-    ).model_dump()
-
-    return success_response(
-        message="Document view URL generated successfully.",
-        data=view_data,
-    )
-
-
-# ── GET /applicant/{applicant_id}/download-all ───
+# ═══════════════════════════════════════════════════════════════════════
+# GET /applicant/{applicant_id}/download-all  — ZIP download
+# ═══════════════════════════════════════════════════════════════════════
 
 @router.get("/applicant/{applicant_id}/download-all")
 def download_all_documents_route(
     applicant_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
 ):
-    """
-    Download all active documents for an applicant as a ZIP archive.
-    """
-    applicant = db.query(Applicant).filter(Applicant.id == applicant_id, Applicant.is_deleted == False).first()
-    if not applicant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Applicant not found.")
-
-    documents = list_applicant_documents(db, applicant_id)
-    if not documents:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No documents available for this applicant.")
-
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for doc in documents:
-            try:
-                signed_url = generate_signed_url(doc.storage_path, expires_in=300)
-                file_bytes = download_file_as_bytes(signed_url)
-                arcname = f"{doc.document_type}/{doc.original_file_name}"
-                zf.writestr(arcname, file_bytes)
-            except Exception:
-                # Skip files that can't be downloaded
-                continue
-
-    zip_buffer.seek(0)
-    filename = f"{applicant.full_name.replace(' ', '_')}_documents.zip"
+    """Download all active documents for an applicant as a ZIP archive."""
+    try:
+        result = svc.download_zip(applicant_id)
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
 
     return StreamingResponse(
-        iter([zip_buffer.getvalue()]),
+        io.BytesIO(result["zip_bytes"]),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{result["filename"]}"'},
     )
 
 
-# ── GET /{document_id}/diagnose — Storage Diagnostics ──
+# ═══════════════════════════════════════════════════════════════════════
+# GET /{document_id}  — Get document metadata
+# ═══════════════════════════════════════════════════════════════════════
 
-@router.get("/{document_id}/diagnose")
-def diagnose_document_route(
+@router.get("/{document_id}")
+def get_document_route(
     document_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
 ):
-    """
-    Run storage diagnostics for a specific document.
-    Checks if the object exists in the bucket and verifies path integrity.
-    Admin-only diagnostic tool.
-    """
-    from app.services.storage_service import diagnose_storage_path
-    doc = get_document_by_id(db, document_id)
-    diagnosis = diagnose_storage_path(doc.storage_path)
-    diagnosis["document_id"] = doc.id
-    diagnosis["document_code"] = doc.document_code
-    diagnosis["stored_file_name"] = doc.stored_file_name
-    diagnosis["mime_type"] = doc.mime_type
-    return success_response(
-        message="Storage diagnostics completed.",
-        data=diagnosis,
-    )
+    """Get document metadata by ID."""
+    try:
+        data = svc.get_metadata(document_id)
+        return success_response("Document retrieved successfully.", data=data)
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
-# ── DELETE /{document_id} ────────────────────────
+# ═══════════════════════════════════════════════════════════════════════
+# GET /{document_id}/view  — Generate signed view URL
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/{document_id}/view")
+def view_document_route(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+):
+    """Generate a secure, temporary signed view URL."""
+    try:
+        data = svc.get_view_url(document_id)
+        logger.info(
+            "VIEW: id=%s code=%s path='%s' url=%s",
+            document_id, data["document_code"], "",
+            data["view_url"][:80] + "..." if len(data["view_url"]) > 80 else data["view_url"],
+        )
+        return success_response("View URL generated successfully.", data=data)
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /{document_id}/download  — Generate signed download URL
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/{document_id}/download")
+def download_document_route(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+):
+    """Generate a secure, temporary signed download URL."""
+    try:
+        data = svc.get_download_url(document_id)
+        logger.info(
+            "DOWNLOAD: id=%s code=%s file='%s'",
+            document_id, data["document_code"], data["original_file_name"],
+        )
+        return success_response("Download URL generated successfully.", data=data)
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# DELETE /{document_id}  — Soft-delete
+# ═══════════════════════════════════════════════════════════════════════
 
 @router.delete("/{document_id}")
 def delete_document_route(
     document_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
 ):
-    """
-    Soft-delete a document record.
-    """
-    document = soft_delete_document(db, document_id, deleted_by=current_user.id)
-    
-    return success_response(
-        message=f"Document '{document.original_file_name}' deleted successfully.",
-    )
+    """Soft-delete a document."""
+    try:
+        data = svc.delete(document_id, deleted_by=current_user.id)
+        return success_response(f"Document '{data['original_file_name']}' deleted successfully.", data=data)
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# PATCH /{document_id}/restore  — Restore soft-deleted document
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.patch("/{document_id}/restore")
+def restore_document_route(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+):
+    """Restore a soft-deleted document."""
+    try:
+        data = svc.restore(document_id)
+        return success_response(f"Document '{data['original_file_name']}' restored successfully.", data=data)
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GET /{document_id}/diagnose  — Storage diagnostics
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/{document_id}/diagnose")
+def diagnose_document_route(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    svc: DocumentService = Depends(_get_service),
+):
+    """Run full storage diagnostics for a document."""
+    try:
+        data = svc.diagnose(document_id)
+        return success_response("Storage diagnostics completed.", data=data)
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
