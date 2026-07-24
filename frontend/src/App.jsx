@@ -1,11 +1,13 @@
-import React, { lazy, Suspense } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
+import SplashScreen from './components/SplashScreen';
 import DashboardLayout from './layouts/DashboardLayout';
 import Login from './pages/Auth/Login';
 
@@ -21,40 +23,39 @@ const Forbidden = lazy(() => import('./pages/Errors/Forbidden'));
 const NotFound = lazy(() => import('./pages/Errors/NotFound'));
 const ServerError = lazy(() => import('./pages/Errors/ServerError'));
 
-function App() {
+function AppContent() {
+  const [splashDone, setSplashDone] = useState(false);
+
   return (
-    <Router>
-      <AuthProvider>
-        <NotificationProvider>
-        {/* Toast notifications rendering container */}
+    <>
+      {!splashDone && <SplashScreen onComplete={() => setSplashDone(true)} />}
+      <div style={{ opacity: splashDone ? 1 : 0, transition: 'opacity 0.5s ease' }}>
         <Toaster
           position="top-right"
           toastOptions={{
             duration: 4000,
-            className: 'text-sm font-semibold text-slate-800 rounded-xl shadow-lg border border-slate-100 bg-white/95 backdrop-blur-md',
+            className: 'text-sm font-semibold rounded-xl shadow-lg border backdrop-blur-md transition-colors duration-300',
+            style: {
+              background: 'var(--toast-bg)',
+              borderColor: 'var(--toast-border)',
+              color: 'var(--text-primary)',
+            },
             success: {
-              iconTheme: {
-                primary: '#f68b1e',
-                secondary: '#fff',
-              },
+              iconTheme: { primary: '#f68b1e', secondary: '#fff' },
             },
           }}
         />
 
         <ErrorBoundary>
           <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+            <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-page)' }}>
               <LoadingSpinner label="Loading Ready2Go CRM..." size="lg" />
             </div>
           }>
           <Routes>
-            {/* Root Redirect */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-            {/* Public Auth */}
             <Route path="/login" element={<Login />} />
 
-            {/* Protected Area wrapping DashboardLayout */}
             <Route element={<ProtectedRoute><ErrorBoundary><DashboardLayout /></ErrorBoundary></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/applicants" element={<ApplicantsPage />} />
@@ -65,17 +66,27 @@ function App() {
               <Route path="/activity-logs" element={<ProtectedRoute requireAdmin><ActivityLogs /></ProtectedRoute>} />
             </Route>
 
-            {/* System Error Views */}
             <Route path="/403" element={<Forbidden />} />
             <Route path="/500" element={<ServerError />} />
             <Route path="/404" element={<NotFound />} />
-
-            {/* Catch-all Routing */}
             <Route path="*" element={<Navigate to="/404" replace />} />
           </Routes>
           </Suspense>
         </ErrorBoundary>
-        </NotificationProvider>
+      </div>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <ThemeProvider>
+          <NotificationProvider>
+            <AppContent />
+          </NotificationProvider>
+        </ThemeProvider>
       </AuthProvider>
     </Router>
   );

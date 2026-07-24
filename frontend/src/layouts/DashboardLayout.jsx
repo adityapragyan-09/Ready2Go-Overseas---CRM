@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../context/NotificationContext';
+import { useTheme } from '../context/ThemeContext';
 import Logo from '../assets/logo/Logo';
 import {
   LayoutDashboard,
@@ -19,7 +20,9 @@ import {
   ChevronDown,
   PhoneCall,
   ClipboardList,
-  Inbox
+  Inbox,
+  Sun,
+  Moon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../config/api';
@@ -27,6 +30,7 @@ import api from '../config/api';
 const DashboardLayout = () => {
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
+  const { theme, toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -200,6 +204,13 @@ const DashboardLayout = () => {
                 <span className="text-[10px] text-brand-orange uppercase font-bold tracking-wider leading-none mt-0.5">{user?.role}</span>
               </div>
             </div>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+              aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
           </div>
           <button
             onClick={handleLogout}
@@ -224,9 +235,10 @@ const DashboardLayout = () => {
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen">
         
         {/* Desktop Top Header & Navigation */}
-        <header className="hidden md:flex items-center justify-between px-8 py-4 bg-white/70 backdrop-blur-md border-b border-slate-100 sticky top-0 z-30">
+        <header className="hidden md:flex items-center justify-between px-8 py-4 sticky top-0 z-30 transition-colors duration-300"
+              style={{ backgroundColor: 'var(--bg-header)', borderColor: 'var(--border-color)' }}>
           {/* Breadcrumb Path area */}
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+          <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
             {getBreadcrumbs().map((crumb, idx) => (
               <React.Fragment key={idx}>
                 {idx > 0 && <span>/</span>}
@@ -235,7 +247,7 @@ const DashboardLayout = () => {
                     {crumb.label}
                   </Link>
                 ) : (
-                  <span className="text-slate-800 font-bold">{crumb.label}</span>
+                  <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{crumb.label}</span>
                 )}
               </React.Fragment>
             ))}
@@ -243,14 +255,27 @@ const DashboardLayout = () => {
 
           {/* Inbox icon + User Profile dropdown menu */}
           <div className="flex items-center gap-2">
-            <Link to="/inbox" className="relative p-2 rounded-xl hover:bg-slate-50 transition-colors" title="Inbox">
-              <Inbox className="h-5 w-5 text-slate-600" />
+            <Link to="/inbox" className="relative p-2 rounded-xl transition-colors" title="Inbox"
+                  style={{ color: 'var(--text-secondary)' }}>
+              <Inbox className="h-5 w-5" />
               {unreadCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-brand-orange text-white text-[8px] font-bold flex items-center justify-center">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
             </Link>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl hover:bg-slate-50 transition-colors"
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDark ? (
+                <Sun className="h-5 w-5 text-amber-400" />
+              ) : (
+                <Moon className="h-5 w-5 text-slate-600" />
+              )}
+            </button>
             <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}
