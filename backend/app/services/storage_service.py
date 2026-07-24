@@ -129,6 +129,14 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     Tries two API formats in order:
       1) Body API:  POST /object/sign/{bucket}       body={"path":p, "expiresIn":N}
       2) Legacy API: POST /object/sign/{bucket}/{path} body={"expiresIn":N}
+
+    Logs the COMPLETE raw response from Supabase for debugging.
+    Handles ALL known response formats:
+      - {"signedURL": "/storage/...?token=..."}
+      - {"signedUrl": "https://...?token=..."}
+      - {"data": {"signedUrl": "..."}}
+      - Plain string URL
+      - Array containing URL
     """
     storage_path = storage_path.strip()
 
@@ -142,19 +150,99 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
     headers["Content-Type"] = "application/json"
     base_url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{settings.SUPABASE_BUCKET}"
 
-    logger.info("SIGNED URL REQUEST: bucket=%s path='%s' expires=%s", settings.SUPABASE_BUCKET, storage_path, expires_in)
+    logger.info("=== SIGNED URL REQUEST ===")
+    logger.info("  bucket=%s", settings.SUPABASE_BUCKET)
+    logger.info("  storage_path='%s'", storage_path)
+    logger.info("  expires_in=%s", expires_in)
+
+    def _extract_signed_url(response) -> str | None:
+        """Extract a signed URL from ANY response format.
+
+        Returns the raw signed URL string (possibly relative),
+        or None if no URL could be extracted.
+        """
+        raw_text = response.text
+        logger.info("RAW SUPABASE RESPONSE (status=%s): %s", response.status_code, raw_text[:2000])
+
+        if not raw_text or raw_text.strip() == "":
+            logger.warning("Empty response body")
+            return None
+
+        # Try to parse as JSON
+        try:
+            data = response.json()
+        except Exception:
+            # Not JSON — maybe plain string URL
+            cleaned = raw_text.strip().strip('"').strip("'")
+            if cleaned.startswith("http://") or cleaned.startswith("https://") or cleaned.startswith("/"):
+                logger.info("EXTRACTED as plain string: %s...", cleaned[:100])
+                return cleaned
+            logger.warning("Response is not JSON or URL string: %s", raw_text[:200])
+            return None
+
+        # It's JSON — try all known signed URL field locations
+        # Flatten nested structures
+        flat = {}
+
+        def _flatten(obj, prefix=""):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    _flatten(v, f"{prefix}{k}.")
+            elif isinstance(obj, list):
+                for i, v in enumerate(obj):
+                    _flatten(v, f"{prefix}{i}.")
+            else:
+                flat[prefix.rstrip(".")] = obj
+
+        _flatten(data)
+
+        # Log all fields for debugging
+        logger.info("PARSED RESPONSE FIELDS: %s", flat)
+
+        # Known signed URL field names (in priority order)
+        known_fields = [
+            "signedURL", "signedUrl", "signed_url",
+            "data.signedURL", "data.signedUrl", "data.signed_url",
+            "url", "URL",
+            "data",
+        ]
+
+        for field in known_fields:
+            val = flat.get(field) or (data.get(field) if isinstance(data, dict) else None)
+            if val and isinstance(val, str) and (val.startswith("http") or val.startswith("/")):
+                logger.info("EXTRACTED from field '%s': %s...", field, val[:100])
+                return val
+
+        # Last resort: check if any string-typed value looks like a URL
+        for k, v in flat.items():
+            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://") or v.startswith("/")):
+                if "token" in v or "sign" in v:
+                    logger.info("EXTRACTED from field '%s' (heuristic): %s...", k, v[:100])
+                    return v
+
+        logger.error("COULD NOT EXTRACT signed URL from response. Raw=%s", raw_text[:2000])
+        return None
+
+    def _make_absolute(raw_url: str) -> str:
+        """Convert a possibly-relative signed URL to an absolute URL."""
+        if raw_url.startswith("http://") or raw_url.startswith("https://"):
+            return raw_url
+        if raw_url.startswith("/"):
+            # The signed URL path should look like:
+            #   /storage/v1/object/sign/{bucket}/{path}?token=...
+            # Prepend the Supabase origin
+            return f"{settings.SUPABASE_URL}{raw_url}"
+        # Relative without leading slash — treat as relative to SUPABASE_URL
+        return f"{settings.SUPABASE_URL}/{raw_url}"
 
     # ── Attempt 1: Current API (path in request body) ──
     try:
         response = requests.post(base_url, json={"path": storage_path, "expiresIn": expires_in}, headers=headers, timeout=60)
-        logger.info("SIGNED URL ATTEMPT 1 (body API): status=%s body=%s", response.status_code, response.text[:500] if response.text else "(empty)")
-        if response.status_code == 200:
-            data = response.json()
-            signed_url = data.get("signedURL") or data.get("signedUrl")
-            if signed_url:
-                full_url = _resolve_signed_url(signed_url)
-                logger.info("SIGNED URL SUCCESS (body API): path=%s url_len=%d", storage_path, len(full_url))
-                return full_url
+        raw_url = _extract_signed_url(response)
+        if raw_url:
+            full_url = _make_absolute(raw_url)
+            logger.info("SIGNED URL RESULT (body API): final_url=%s", full_url)
+            return full_url
     except requests.RequestException as e:
         logger.warning("SIGNED URL attempt 1 network error: %s", e)
 
@@ -163,28 +251,15 @@ def generate_signed_url(storage_path: str, expires_in: int = 3600) -> str:
         encoded_path = urllib.parse.quote(storage_path, safe="/")
         legacy_url = f"{base_url}/{encoded_path}"
         response = requests.post(legacy_url, json={"expiresIn": expires_in}, headers=headers, timeout=60)
-        logger.info("SIGNED URL ATTEMPT 2 (legacy API): status=%s body=%s", response.status_code, response.text[:500] if response.text else "(empty)")
-        if response.status_code == 200:
-            data = response.json()
-            signed_url = data.get("signedURL") or data.get("signedUrl")
-            if signed_url:
-                full_url = _resolve_signed_url(signed_url)
-                logger.info("SIGNED URL SUCCESS (legacy API): path=%s url_len=%d", storage_path, len(full_url))
-                return full_url
+        raw_url = _extract_signed_url(response)
+        if raw_url:
+            full_url = _make_absolute(raw_url)
+            logger.info("SIGNED URL RESULT (legacy API): final_url=%s", full_url)
+            return full_url
     except requests.RequestException as e:
         logger.warning("SIGNED URL attempt 2 network error: %s", e)
 
     raise HTTPException(status_code=502, detail="Failed to generate document access URL.")
-
-
-def _resolve_signed_url(signed_url: str) -> str:
-    """Convert a signed URL response to a full absolute URL."""
-    if signed_url.startswith("http://") or signed_url.startswith("https://"):
-        return signed_url
-    if signed_url.startswith("/"):
-        return f"{settings.SUPABASE_URL}{signed_url}"
-    # Relative URL — prepend base
-    return f"{settings.SUPABASE_URL}/{signed_url}"
 
 
 def download_file_as_bytes(file_url: str) -> bytes:
